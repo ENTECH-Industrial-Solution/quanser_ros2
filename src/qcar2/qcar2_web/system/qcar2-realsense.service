@@ -1,0 +1,14 @@
+[Unit]
+Description=QCar2 RealSense colour + depth camera; started/stopped by the web node (eco mode: only while used)
+# Needs the robot nodes; stops with them (MATLAB mode).
+Requisite=qcar2-robot.service
+After=qcar2-robot.service
+PartOf=qcar2-robot.service
+
+[Service]
+User=nvidia
+ExecStart=/usr/local/bin/qcar2-run start_web:=false start_hardware:=false start_lidar:=false start_odom:=false start_csi:=false start_realsense:=true
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5

@@ -1,0 +1,6 @@
+[Unit]
+Description=Log QCar2 load, memory, temperatures and top processes
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/qcar-health

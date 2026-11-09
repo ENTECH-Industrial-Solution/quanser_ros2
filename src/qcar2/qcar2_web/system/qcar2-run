@@ -1,0 +1,30 @@
+#!/bin/bash
+# Runs "ros2 launch qcar2_web qcar2_web_launch.py <args>" with the same environment as an
+# interactive shell (see ~/.bashrc); used by qcar2-robot.service and qcar2-web.service.
+
+export ROS_DOMAIN_ID=0
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI=file:///home/nvidia/cyclonedds.xml
+export QAL_DIR=/home/nvidia/Documents/Quanser
+export PATH=/usr/local/cuda/bin:/home/nvidia/.local/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+
+source /opt/ros/humble/setup.bash
+source /home/nvidia/cyclonedds_ws/install/setup.bash
+source /home/nvidia/ros2/install/setup.bash
+export PYTHONPATH=$PYTHONPATH:/home/nvidia/Documents/Quanser/libraries/python:/home/nvidia/Documents/Quanser/0_libraries/python
+
+# The hardware, cameras and lidar can only be opened by one program at a time: do not start
+# them while a QUARC (MATLAB/Simulink) model is running on the car.
+if [[ "$1" != *.py && " $* " != *" start_hardware:=false "* ]] && pgrep -f '\.rt-linux_qcar2' >/dev/null; then
+  echo "A QUARC model is running (MATLAB mode): not starting the ROS hardware nodes." >&2
+  exit 1
+fi
+
+# "qcar2-run slam_launch.py ..." / "qcar2-run nav_launch.py map:=..." for the other launch files.
+launch_file=qcar2_web_launch.py
+if [[ "$1" == *.py ]]; then
+  launch_file=$1
+  shift
+fi
+exec ros2 launch qcar2_web "$launch_file" "$@"

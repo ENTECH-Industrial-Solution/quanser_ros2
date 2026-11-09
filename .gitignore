@@ -1,0 +1,20 @@
+# colcon
+build/
+install/
+log/
+# python / editors
+__pycache__/
+*.pyc
+*.egg-info/
+.vscode/
+# large / local data
+*.bag
+*.db3
+*.db
+*.mcap
+maps/*.db
+.env
+
+# local docs
+*.docx
+*.pdf

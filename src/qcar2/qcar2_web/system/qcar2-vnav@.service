@@ -1,0 +1,14 @@
+[Unit]
+Description=QCar2 navigation on camera map %I: RTAB-Map localisation + map_server + Nav2 (switch with "qcar-nav")
+# Needs the robot nodes; stops with them (MATLAB mode).
+Requisite=qcar2-robot.service
+After=qcar2-robot.service
+PartOf=qcar2-robot.service
+
+[Service]
+User=nvidia
+ExecStart=/usr/local/bin/qcar2-run vnav_launch.py map:=/home/nvidia/maps/%I.yaml
+KillSignal=SIGINT
+TimeoutStopSec=25
+Restart=on-failure
+RestartSec=5

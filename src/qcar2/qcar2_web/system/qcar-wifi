@@ -1,0 +1,112 @@
+#!/bin/bash
+# Switch the QCar2's Wi-Fi between its own hotspot (for demos) and the normal Wi-Fi.
+#
+#   qcar-wifi demo     # hotspot "QCar2-Demo", web UI at http://10.42.0.1:8080
+#                      # (stays a hotspot after reboot until "office")
+#   qcar-wifi office   # back to the known Wi-Fi networks: PREFERRED first, in that order,
+#                      # then any other known network that is in range (strongest first)
+#   qcar-wifi toggle   # the other one (button S2)
+#   qcar-wifi status   # prints "demo" or "office", then the details
+#
+# Switching drops the current Wi-Fi connection: an SSH session over Wi-Fi will hang, so
+# reconnect your laptop to the new network afterwards.
+#
+# "office" never falls back to the hotspot: if no known network is found within
+# SEARCH_S, the car stays off the hotspot and NetworkManager joins a known network as soon
+# as one is in range. Press S2 again (or "qcar-wifi demo") to get the hotspot back.
+
+HOTSPOT=qcar-demo
+PREFERRED=("Quanser_UVS" "Quanser_UVS-5G")   # SSIDs, most wanted first
+SEARCH_S=40
+
+[ "$(id -u)" -eq 0 ] || exec sudo -n "$0" "$@"
+
+mode() {
+  if nmcli -t -f NAME,DEVICE con show --active | grep -qx "$HOTSPOT:wlan0"; then
+    echo demo
+  else
+    echo office
+  fi
+}
+
+# Autoconnect priorities: PREFERRED high (so NetworkManager also picks them by itself, e.g.
+# at boot), every other known Wi-Fi 0. The hotspot is set by demo/office.
+set_priorities() {
+  local uuid ssid prio i
+  while IFS=: read -r uuid type; do
+    [ "$type" = 802-11-wireless ] || continue
+    [ "$(nmcli -g connection.id con show uuid "$uuid")" = "$HOTSPOT" ] && continue
+    ssid=$(nmcli -g 802-11-wireless.ssid con show uuid "$uuid")
+    prio=0
+    for i in "${!PREFERRED[@]}"; do
+      [ "$ssid" = "${PREFERRED[$i]}" ] && prio=$((50 - 10 * i))
+    done
+    [ "$(nmcli -g connection.autoconnect-priority con show uuid "$uuid")" = "$prio" ] ||
+      nmcli con modify uuid "$uuid" connection.autoconnect-priority "$prio"
+  done < <(nmcli -t -f UUID,TYPE con show)
+}
+
+# Known Wi-Fi connections whose SSID is in range, best first: "priority signal uuid ssid".
+candidates() {
+  local visible uuid type ssid prio sig
+  visible=$(nmcli -t -f SSID,SIGNAL dev wifi list ifname wlan0 2>/dev/null)
+  while IFS=: read -r uuid type; do
+    [ "$type" = 802-11-wireless ] || continue
+    [ "$(nmcli -g 802-11-wireless.mode con show uuid "$uuid")" = ap ] && continue
+    ssid=$(nmcli -g 802-11-wireless.ssid con show uuid "$uuid")
+    sig=$(printf '%s\n' "$visible" | awk -F: -v s="$ssid" '$1 == s && $2 > m {m = $2} END {print m}')
+    [ -n "$sig" ] || continue
+    prio=$(nmcli -g connection.autoconnect-priority con show uuid "$uuid")
+    echo "$prio $sig $uuid $ssid"
+  done < <(nmcli -t -f UUID,TYPE con show) | sort -k1,1nr -k2,2nr
+}
+
+wifi_connected() {   # on a network that is not the hotspot
+  local name
+  name=$(nmcli -t -f NAME,DEVICE con show --active | sed -n 's/:wlan0$//p')
+  [ -n "$name" ] && [ "$name" != "$HOTSPOT" ]
+}
+
+demo() {
+  nmcli con modify "$HOTSPOT" connection.autoconnect yes connection.autoconnect-priority 100
+  nmcli con up "$HOTSPOT"
+}
+
+office() {
+  nmcli con modify "$HOTSPOT" connection.autoconnect no connection.autoconnect-priority 0
+  set_priorities
+  nmcli con down "$HOTSPOT" 2>/dev/null
+  # In hotspot mode the radio could not scan, so the list is empty at first: rescan until a
+  # known network shows up. Never "nmcli dev connect": with nothing in range it would pick
+  # the hotspot again (an AP connection needs no scan result).
+  local deadline=$((SECONDS + SEARCH_S)) prio sig uuid ssid
+  while [ $SECONDS -lt $deadline ]; do
+    sleep 2
+    wifi_connected && { echo "connected"; return 0; }   # NetworkManager was quicker
+    nmcli dev wifi rescan ifname wlan0 2>/dev/null
+    sleep 2
+    while read -r prio sig uuid ssid; do
+      echo "trying $ssid (priority $prio, signal $sig)"
+      nmcli --wait 15 con up uuid "$uuid" ifname wlan0 && return 0
+    done < <(candidates)
+  done
+  echo "no known Wi-Fi in range; will join one when it appears (S2 again = hotspot)" >&2
+  return 1
+}
+
+case "$1" in
+  demo) demo ;;
+  office) office ;;
+  toggle)
+    if [ "$(mode)" = demo ]; then office; else demo; fi
+    ;;
+  status)
+    mode
+    nmcli -t -f NAME,DEVICE con show --active | grep wlan0
+    ip -4 -br addr show wlan0
+    ;;
+  *)
+    echo "usage: $0 demo|office|toggle|status" >&2
+    exit 1
+    ;;
+esac

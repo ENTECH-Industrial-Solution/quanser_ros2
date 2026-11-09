@@ -1,0 +1,14 @@
+[Unit]
+Description=QCar2 navigation on map %I: map_server + AMCL + Nav2 (switch with "qcar-nav")
+# Needs the robot nodes; stops with them (MATLAB mode).
+Requisite=qcar2-robot.service
+After=qcar2-robot.service
+PartOf=qcar2-robot.service
+
+[Service]
+User=nvidia
+ExecStart=/usr/local/bin/qcar2-run nav_launch.py map:=/home/nvidia/maps/%I.yaml
+KillSignal=SIGINT
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5

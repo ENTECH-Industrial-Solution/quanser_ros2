@@ -1,0 +1,11 @@
+#!/bin/bash
+# One line of system health for the journal (qcar2-health.timer, every 30 s). After a freeze:
+#   journalctl -b -1 -t qcar-health | tail      # the last readings before it
+load=$(cut -d' ' -f1-3 /proc/loadavg)
+mem=$(free -m | awk '/^Mem:/ {printf "%d/%dMB", $3, $2}')
+swap=$(free -m | awk '/^Swap:/ {printf "%dMB", $3}')
+temps=$(for z in /sys/class/thermal/thermal_zone*; do
+  t=$(cat "$z/temp" 2>/dev/null); [ "${t:-0}" -gt 0 ] && printf '%s=%d ' "$(cat "$z/type")" $((t / 1000))
+done)
+top=$(ps -eo pcpu=,comm= --sort=-pcpu | head -5 | awk '{printf "%s:%s ", $2, $1}')
+logger -t qcar-health "load $load mem $mem swap $swap temp ${temps}top $top"

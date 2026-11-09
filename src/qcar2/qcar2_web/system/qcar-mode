@@ -1,0 +1,43 @@
+#!/bin/bash
+# Who uses the QCar2 hardware (motors, cameras, lidar, buttons):
+#
+#   qcar-mode ros       # the ROS nodes (qcar2-robot.service) - started by hand (web "เริ่ม ROS" or S3 held 2 s); not at boot
+#   qcar-mode matlab    # nobody: stops the ROS nodes so a MATLAB/QUARC model can open them
+#                       # (button S3 held 2 s toggles ros/matlab, as does the web UI)
+#   qcar-mode status
+#
+#   qcar-mode autostart on|off   # start the ROS nodes and the web UI at boot (or not)
+#   qcar-mode stop-all           # also stop the web UI, e.g. before "ros2 launch" by hand
+#
+# The web UI (qcar2-web.service) keeps running in MATLAB mode, so the car can be switched
+# back from the browser.
+
+[ "$(id -u)" -eq 0 ] || exec sudo -n "$0" "$@"
+
+case "$1" in
+  ros)
+    systemctl start qcar2-web.service qcar2-robot.service
+    ;;
+  matlab)
+    systemctl stop qcar2-robot.service
+    ;;
+  stop-all)
+    systemctl stop qcar2-robot.service qcar2-web.service
+    ;;
+  autostart)
+    case "$2" in
+      on) systemctl enable qcar2-web.service qcar2-robot.service ;;
+      off) systemctl disable qcar2-web.service qcar2-robot.service ;;
+      *) echo "usage: $0 autostart on|off" >&2; exit 1 ;;
+    esac
+    ;;
+  status)
+    if systemctl is-active --quiet qcar2-robot.service; then echo ros; else echo matlab; fi
+    echo "robot: $(systemctl is-active qcar2-robot.service) ($(systemctl is-enabled qcar2-robot.service 2>/dev/null) at boot)"
+    echo "web:   $(systemctl is-active qcar2-web.service) ($(systemctl is-enabled qcar2-web.service 2>/dev/null) at boot)"
+    ;;
+  *)
+    echo "usage: $0 ros|matlab|status|autostart on|off|stop-all" >&2
+    exit 1
+    ;;
+esac

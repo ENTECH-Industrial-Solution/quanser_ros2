@@ -1,0 +1,18 @@
+[Unit]
+Description=QCar2 web interface (port 8080, also port 80), user buttons and LCD status
+After=network.target
+
+[Service]
+User=nvidia
+# The LCD's shared mutex is created by root (quarc_power_monitor): let the web node use it.
+ExecStartPre=-+/bin/chmod 666 /dev/shm/ls027b7dh01-spi1
+# Plain http://<car-ip> (port 80, no :8080) also opens the page; only traffic addressed to the car itself.
+ExecStartPre=-+/bin/sh -c '/usr/sbin/iptables -t nat -C PREROUTING -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-ports 8080 2>/dev/null || /usr/sbin/iptables -t nat -I PREROUTING -p tcp --dport 80 -m addrtype --dst-type LOCAL -j REDIRECT --to-ports 8080'
+ExecStart=/usr/local/bin/qcar2-run start_hardware:=false start_csi:=false start_realsense:=false start_lidar:=false start_odom:=false
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

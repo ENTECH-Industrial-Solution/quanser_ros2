@@ -1,0 +1,16 @@
+[Unit]
+Description=QCar2 ROS hardware, lidar and odometry; cameras run as qcar2-csi / qcar2-realsense (stop it to run MATLAB models)
+After=network.target quarc_target_manager.service qcar2-web.service
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+User=nvidia
+ExecStart=/usr/local/bin/qcar2-run start_web:=false start_csi:=false start_realsense:=false
+KillSignal=SIGINT
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

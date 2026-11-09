@@ -1,0 +1,14 @@
+[Unit]
+Description=QCar2 mapping with the camera: RTAB-Map V-SLAM (switch with "qcar-nav vslam|slam|nav <map>|vnav <map>|stop")
+# Needs the robot nodes; stops with them (MATLAB mode).
+Requisite=qcar2-robot.service
+After=qcar2-robot.service
+PartOf=qcar2-robot.service
+
+[Service]
+User=nvidia
+ExecStart=/usr/local/bin/qcar2-run vslam_launch.py
+KillSignal=SIGINT
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5

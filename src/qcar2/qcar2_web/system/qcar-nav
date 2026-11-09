@@ -1,0 +1,91 @@
+#!/bin/bash
+# Mapping or navigation, one at a time (the ROS robot nodes must be running: qcar-mode ros).
+# Two ways to localise: the lidar (cartographer / AMCL) or the camera (RTAB-Map V-SLAM).
+#
+#   qcar-nav slam          # build a map with the lidar (cartographer); save it on the web page
+#   qcar-nav vslam         # build a map with the RealSense camera (RTAB-Map); save it on the web page
+#   qcar-nav nav <map>     # navigate on ~/maps/<map>.yaml: map_server + AMCL (lidar) + Nav2
+#   qcar-nav vnav <map>    # navigate on a camera map (~/maps/<map>.yaml + .db): RTAB-Map + Nav2
+#   qcar-nav stop          # none of them
+#   qcar-nav status        # "slam", "vslam", "nav <map>", "vnav <map>" or "off"
+#   qcar-nav maps          # the saved maps
+
+MAP_DIR=/home/nvidia/maps
+
+[ "$(id -u)" -eq 0 ] || exec sudo -n "$0" "$@"
+
+nav_units() {
+  systemctl list-units --plain --no-legend --state=active,activating \
+    'qcar2-nav@*.service' 'qcar2-vnav@*.service' | awk '{print $1}'
+}
+
+stop_all() {
+  systemctl stop qcar2-slam.service qcar2-vslam.service $(nav_units)
+}
+
+# Stop every mapping/navigation unit except $1.
+stop_others() {
+  local keep=$1 u
+  for u in qcar2-slam.service qcar2-vslam.service $(nav_units); do
+    [ "$u" = "$keep" ] || systemctl stop "$u"
+  done
+}
+
+need_robot() {
+  if ! systemctl is-active --quiet qcar2-robot.service; then
+    echo "ROS is off (MATLAB mode): start it first (button S3 or qcar-mode ros)" >&2
+    exit 1
+  fi
+}
+
+check_map() {
+  if [[ -z "$1" || ! "$1" =~ ^[A-Za-z0-9_.-]+$ || ! -f "$MAP_DIR/$1.yaml" ]]; then
+    echo "no map '$1' in $MAP_DIR (qcar-nav maps)" >&2
+    exit 1
+  fi
+}
+
+case "$1" in
+  slam|vslam)
+    need_robot
+    unit="qcar2-slam.service"; [ "$1" = vslam ] && unit="qcar2-vslam.service"
+    stop_others "$unit"
+    systemctl start "$unit"
+    ;;
+  nav|vnav)
+    name=$2
+    check_map "$name"
+    if [ "$1" = vnav ] && [ ! -f "$MAP_DIR/$name.db" ]; then
+      echo "map '$name' has no camera data ($name.db): it was made with the lidar - use nav" >&2
+      exit 1
+    fi
+    need_robot
+    prefix="qcar2-nav"; [ "$1" = vnav ] && prefix="qcar2-vnav"
+    unit="$prefix@$(systemd-escape "$name").service"
+    stop_others "$unit"
+    systemctl start "$unit"
+    ;;
+  stop)
+    stop_all
+    ;;
+  status)
+    if systemctl is-active --quiet qcar2-slam.service; then
+      echo slam
+    elif systemctl is-active --quiet qcar2-vslam.service; then
+      echo vslam
+    elif u=$(nav_units | head -1) && [ -n "$u" ]; then
+      kind=nav; [[ "$u" == qcar2-vnav@* ]] && kind=vnav
+      u=${u#qcar2-nav@}; u=${u#qcar2-vnav@}
+      echo "$kind $(systemd-escape --unescape "${u%.service}")"
+    else
+      echo off
+    fi
+    ;;
+  maps)
+    for f in "$MAP_DIR"/*.yaml; do [ -f "$f" ] && basename "$f" .yaml; done
+    ;;
+  *)
+    echo "usage: $0 slam|vslam|nav <map>|vnav <map>|stop|status|maps" >&2
+    exit 1
+    ;;
+esac

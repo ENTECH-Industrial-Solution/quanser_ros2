@@ -1,0 +1,10 @@
+[Unit]
+Description=Log QCar2 health every 30 s (find what ran away before a freeze)
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

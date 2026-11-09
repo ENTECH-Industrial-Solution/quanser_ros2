@@ -1,0 +1,14 @@
+[Unit]
+Description=QCar2 mapping: cartographer SLAM (switch with "qcar-nav slam|nav <map>|stop")
+# Needs the robot nodes; stops with them (MATLAB mode).
+Requisite=qcar2-robot.service
+After=qcar2-robot.service
+PartOf=qcar2-robot.service
+
+[Service]
+User=nvidia
+ExecStart=/usr/local/bin/qcar2-run slam_launch.py
+KillSignal=SIGINT
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5
