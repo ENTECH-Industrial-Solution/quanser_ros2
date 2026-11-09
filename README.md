@@ -66,6 +66,7 @@ A galactic (or other distro) in the environment breaks `qcar2-robot`. Use a clea
 
 ```bash
 source /opt/ros/humble/setup.bash
+source ~/cyclonedds_ws/install/setup.bash   # needed if RMW_IMPLEMENTATION=rmw_cyclonedds_cpp (factory ~/.bashrc sets it)
 cd ~/ros2
 rosdep install --from-paths src --ignore-src -y     # apt deps, if any are missing
 colcon build
