@@ -112,7 +112,7 @@ Do not start the ROS hardware nodes while a QUARC (MATLAB/Simulink) model is run
 ```bash
 cd ~/ros2 && git pull
 git sparse-checkout list 2>/dev/null | grep -qx src/common || \
-  { git config core.sparseCheckout | grep -q true && git sparse-checkout add src/common; }   # once: qcar2_web needs src/common
+  { git config core.sparseCheckout | grep -q true && git sparse-checkout set $(git sparse-checkout list) src/common; } || true   # once: qcar2_web needs src/common
 source /opt/ros/humble/setup.bash && colcon build
 sudo src/qcar2/qcar2_web/system/install.sh      # only if files in system/ changed
 ```
@@ -123,4 +123,5 @@ get `src/common` from `git pull`; the second line adds it (it does nothing on a 
 ## Adding another robot later
 
 On a machine that already has the repo: `./scripts/clone_robot.sh --list`, or
-`git sparse-checkout add src/<robot>` inside `~/ros2`.
+`git sparse-checkout set $(git sparse-checkout list) src/<robot>` inside `~/ros2`
+(git 2.25 on JetPack has no `sparse-checkout add`).
