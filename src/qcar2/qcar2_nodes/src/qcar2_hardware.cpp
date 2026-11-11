@@ -15,6 +15,8 @@
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/u_int8.hpp"
 #include "std_msgs/msg/color_rgba.hpp"
+#include "std_msgs/msg/string.hpp"
+#include <sstream>
 #include <algorithm>
 #include <cmath>
 #include <mutex>
@@ -262,6 +264,16 @@ public:
             "qcar2_led_color", rclcpp::QoS(1).reliable().transient_local(),
             std::bind(&QCar2::led_color_callback, this, _1), led_sub_options);
 
+        // Animated effects ("rainbow 1.0 0.8 255 0 0" = name speed brightness r g b; "none"
+        // stops), drawn here ~30 times a second. Latched like the colour, which shows again when
+        // the effect stops. A new led_color_id value stops the effect.
+        led_effect_subscriber_ = this->create_subscription<std_msgs::msg::String>(
+            "qcar2_led_effect", rclcpp::QoS(1).reliable().transient_local(),
+            std::bind(&QCar2::led_effect_callback, this, _1), led_sub_options);
+        timer_led_effect_ = this->create_wall_timer(33ms, std::bind(&QCar2::led_effect_timer, this),
+                                                    led_cb_group_);
+        effect_start_ = std::chrono::steady_clock::now();
+
         // LED strip timer in its own group: LED_Set() writes for 0.2 s, which used to hold up
         // the speed controller (same default group) on every colour change.
         timer_led_callback_ = this->create_wall_timer(500ms, std::bind(&QCar2::led_timer, this),
@@ -319,7 +331,89 @@ private:
         };
         std::lock_guard<std::mutex> lock(led_mutex_);
         custom_color_ = {to8(msg.r, msg.a), to8(msg.g, msg.a), to8(msg.b, msg.a)};
-        custom_color_pending_ = true;
+        custom_color_pending_ = true;   // shown when no effect runs (the web sends "none" with a colour)
+    }
+
+    void led_effect_callback(const std_msgs::msg::String &msg)
+    {
+        std::istringstream in(msg.data);
+        std::string name = "none";
+        double speed = 1.0, bright = 1.0, r = 255, g = 255, b = 255;
+        in >> name >> speed >> bright >> r >> g >> b;
+        std::lock_guard<std::mutex> lock(led_mutex_);
+        const bool was = effect_ != "none";
+        effect_ = (name == "rainbow" || name == "cycle" || name == "chase" || name == "breathe") ? name : "none";
+        effect_speed_ = std::clamp(std::isfinite(speed) ? speed : 1.0, 0.05, 10.0);
+        effect_bright_ = std::clamp(std::isfinite(bright) ? bright : 1.0, 0.0, 1.0);
+        effect_rgb_[0] = std::clamp(r, 0.0, 255.0);
+        effect_rgb_[1] = std::clamp(g, 0.0, 255.0);
+        effect_rgb_[2] = std::clamp(b, 0.0, 255.0);
+        if (effect_ == "none" && was)
+            custom_color_pending_ = true;   // back to the plain colour
+        RCLCPP_INFO(this->get_logger(), "LED effect: %s (speed %.2f, brightness %.2f)",
+                    effect_.c_str(), effect_speed_, effect_bright_);
+    }
+
+    static t_led_color hsv(double h, double v)
+    {
+        h = h - std::floor(h);
+        const double x = h * 6.0;
+        const int k = static_cast<int>(x) % 6;
+        const double f = x - std::floor(x);
+        double r = 0, g = 0, b = 0;
+        switch (k) {
+            case 0: r = 1; g = f; break;
+            case 1: r = 1 - f; g = 1; break;
+            case 2: g = 1; b = f; break;
+            case 3: g = 1 - f; b = 1; break;
+            case 4: r = f; b = 1; break;
+            default: r = 1; b = 1 - f; break;
+        }
+        auto c = [v](double u) { return static_cast<t_uint8>(std::lround(std::clamp(u * v, 0.0, 1.0) * 255.0)); };
+        return {c(r), c(g), c(b)};
+    }
+
+    void led_effect_timer()
+    {
+        std::string effect;
+        double speed, bright, rgb[3];
+        {
+            std::lock_guard<std::mutex> lock(led_mutex_);
+            effect = effect_;
+            speed = effect_speed_;
+            bright = effect_bright_;
+            std::copy(effect_rgb_, effect_rgb_ + 3, rgb);
+        }
+        if (effect == "none")
+            return;
+        const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - effect_start_).count() * speed;
+        const int n = LED_STRIP_SIZE;
+        t_led_color color[LED_STRIP_SIZE];
+        auto scaled = [&rgb](double v) {
+            return t_led_color{static_cast<t_uint8>(std::lround(rgb[0] * v)), static_cast<t_uint8>(std::lround(rgb[1] * v)),
+                               static_cast<t_uint8>(std::lround(rgb[2] * v))};
+        };
+        for (int i = 0; i < n; i++)
+        {
+            if (effect == "rainbow")        // the whole rainbow along the strip, running around
+                color[i] = hsv(static_cast<double>(i) / n - 0.5 * t, bright);
+            else if (effect == "cycle")     // the whole strip one colour, going through the rainbow
+                color[i] = hsv(0.2 * t, bright);
+            else if (effect == "chase")     // a light with a fading tail running around
+            {
+                const double head = std::fmod(0.5 * t, 1.0) * n;
+                double d = std::fmod(head - i + n, static_cast<double>(n));   // distance behind the head
+                color[i] = scaled(bright * std::max(0.0, 1.0 - d / 6.0));
+            }
+            else                            // breathe
+                color[i] = scaled(bright * (0.08 + 0.92 * (0.5 - 0.5 * std::cos(2.0 * M_PI * 0.5 * t))));
+        }
+        t_error result = aaaf5050_mc_k12_write(led_strip, color, n);
+        if (result < 0)
+        {
+            msg_get_error_messageA(NULL, result, error_message, sizeof(error_message));
+            RCLCPP_ERROR_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Error writing LED effect: %s", error_message);
+        }
     }
 
     void led_timer()
@@ -329,9 +423,10 @@ private:
         {
             if (response != -1)
             {
-                // the parameter was changed on purpose: it wins over a custom colour
+                // the parameter was changed on purpose: it wins over a custom colour / effect
                 std::lock_guard<std::mutex> lock(led_mutex_);
                 custom_color_pending_ = false;
+                effect_ = "none";
             }
             LED_Set();
             // RCLCPP_INFO(this->get_logger(),"Setting new LED Value %i",led_color_id);
@@ -345,7 +440,12 @@ private:
             custom = custom_color_;
             custom_color_pending_ = false;
         }
-        if (pending)
+        bool effect_on;
+        {
+            std::lock_guard<std::mutex> lock(led_mutex_);
+            effect_on = effect_ != "none";
+        }
+        if (pending && !effect_on)
         {
             LED_Write(custom);
         }
@@ -788,6 +888,11 @@ private:
     std::mutex led_mutex_;
     t_led_color custom_color_ = {0, 0, 0};
     bool custom_color_pending_ = false;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr led_effect_subscriber_;
+    rclcpp::TimerBase::SharedPtr timer_led_effect_;
+    std::string effect_ = "none";
+    double effect_speed_ = 1.0, effect_bright_ = 1.0, effect_rgb_[3] = {255, 255, 255};
+    std::chrono::steady_clock::time_point effect_start_;
 
     //LED ID selector
     int led_color_id;

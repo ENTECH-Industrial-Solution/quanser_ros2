@@ -24,6 +24,8 @@ import cv2
 import numpy as np
 
 SIDES = ('front', 'left', 'right', 'back')
+TOP_ELEV = 89.5        # view elevations above this use the orthographic top view
+GROUND_MAX_M = 6.0     # perspective views: ground further than this from the car stays empty
 CAMERA_KEYS = ('x', 'y', 'z', 'yaw', 'pitch', 'roll')
 
 DEFAULT_CONFIG = {
@@ -33,6 +35,12 @@ DEFAULT_CONFIG = {
     'blend_power': 4.0,       # higher = narrower seams between cameras
     'car_length': 0.425,
     'car_width': 0.192,
+    'car_height': 0.18,       # box drawn for the car in the 3D (perspective) views
+    # Virtual camera the surround view is seen from. elev 90 = straight down (the classic
+    # bird's-eye view, zoom = range_m); below that a perspective camera orbits the car:
+    # orbit = direction it looks (0 = from behind looking forward, 90 = from the right
+    # looking left), dist = metres from the car centre, fov = horizontal field of view.
+    'view': {'elev': 90.0, 'orbit': 0.0, 'dist': 1.6, 'fov': 75.0},
     'intrinsics': {           # at calib_width x calib_height; scaled for other sizes
         'calib_width': 820, 'calib_height': 410,
         'fx': 318.86, 'fy': 312.14, 'cx': 401.34, 'cy': 201.50,
@@ -55,6 +63,8 @@ LIMITS = {
     'blend_power': (0.5, 20.0),
     'car_length': (0.05, 2.0),
     'car_width': (0.05, 2.0),
+    'car_height': (0.0, 1.0),
+    'elev': (5.0, 90.0), 'orbit': (-360.0, 360.0), 'dist': (0.3, 10.0), 'fov': (30.0, 140.0),
     'x': (-2.0, 2.0), 'y': (-2.0, 2.0), 'z': (0.01, 2.0),
     'yaw': (-360.0, 360.0), 'pitch': (-89.0, 89.0), 'roll': (-180.0, 180.0),
     'fx': (10.0, 5000.0), 'fy': (10.0, 5000.0), 'cx': (0.0, 5000.0), 'cy': (0.0, 5000.0),
@@ -128,17 +138,40 @@ class SurroundModel:
         size = config['size_px']
         rng = config['range_m']
         intr = config['intrinsics']
-        self.size = size
         self.calib_size = (intr['calib_width'], intr['calib_height'])
-        mpp = rng / size
-
-        # Ground point under the centre of every output pixel; image up = forward, left = left.
-        idx = (np.arange(size, dtype=np.float64) + 0.5) * mpp
-        gx, gy = np.meshgrid(rng / 2 - idx, rng / 2 - idx, indexing='ij')
-        ground = np.stack([gx, gy, np.zeros_like(gx)], axis=-1)
-
+        view = config['view']
+        self.top = view['elev'] > TOP_ELEV
         half_l, half_w = config['car_length'] / 2, config['car_width'] / 2
-        under_car = (np.abs(gx) <= half_l) & (np.abs(gy) <= half_w)
+
+        if self.top:
+            self.h = self.w = size
+            mpp = rng / size
+            # Ground point under the centre of every output pixel; image up = forward, left = left.
+            idx = (np.arange(size, dtype=np.float64) + 0.5) * mpp
+            gx, gy = np.meshgrid(rng / 2 - idx, rng / 2 - idx, indexing='ij')
+            ground = np.stack([gx, gy, np.zeros_like(gx)], axis=-1)
+            off_ground = np.zeros_like(gx, dtype=bool)
+        else:
+            mpp = None
+            self.w, self.h = size, int(round(size * 0.625)) // 2 * 2   # 16:10
+            self._set_virtual_camera(view)
+            # Ray through every pixel, intersected with the ground plane z = 0.
+            jj, ii = np.meshgrid(np.arange(self.w) + 0.5 - self.w / 2,
+                                 np.arange(self.h) + 0.5 - self.h / 2)
+            rays = (self.fwd[None, None, :] + (jj / self.f_px)[..., None] * self.right
+                    + (ii / self.f_px)[..., None] * self.down)
+            rz = rays[..., 2]
+            hits = rz < -1e-6
+            t = np.where(hits, -self.cam_pos[2] / np.where(hits, rz, -1.0), 0.0)
+            ground = self.cam_pos + t[..., None] * rays
+            ground[..., 2] = 0.0
+            gx, gy = ground[..., 0], ground[..., 1]
+            off_ground = ~hits | (np.hypot(gx, gy) > GROUND_MAX_M)
+            ground[off_ground] = (1e3, 1e3, 0.0)
+            gx, gy = ground[..., 0], ground[..., 1]
+        self.size = self.w
+
+        under_car = ((np.abs(gx) <= half_l) & (np.abs(gy) <= half_w)) | off_ground
 
         weights, us, vs = {}, {}, {}
         for side in SIDES:
@@ -189,14 +222,15 @@ class SurroundModel:
                                            cv2.CHAIN_APPROX_SIMPLE)
             self.regions[side] = (~region, contours)
 
-        overlay, alpha = self._draw_overlay(config, mpp)
+        overlay, alpha = (self._draw_overlay(config, mpp) if self.top
+                          else self._draw_overlay_3d(config))
         self.overlay = overlay
         a = np.ascontiguousarray(alpha[:, :, 0], dtype=np.float32)
         self.alpha = (1.0 - a, a)   # weights of (camera view, overlay)
 
     def _project(self, ground, cam, intr):
         """Remap tables (float32) and raw blend weight for one camera."""
-        h, w = self.size, self.size
+        h, w = self.h, self.w
         rot = _rotation(cam['yaw'], cam['pitch'], cam['roll'])
         t = np.array([cam['x'], cam['y'], cam['z']])
         # = rot.T @ (p - t) per point. einsum, not "@": "@" goes to OpenBLAS, whose thread
@@ -266,6 +300,95 @@ class SurroundModel:
         nose = np.array([px(half_l * 0.95, 0), px(half_l * 0.72, half_w * 0.35),
                          px(half_l * 0.72, -half_w * 0.35)], np.int32)
         cv2.fillConvexPoly(overlay, nose, (60, 200, 255), cv2.LINE_AA)
+
+        alpha = cv2.merge([mask.astype(np.float32) / 255.0] * 3)
+        return overlay, alpha
+
+    def _set_virtual_camera(self, view):
+        """Pose of the perspective virtual camera, looking at the car centre."""
+        elev, orbit = math.radians(view['elev']), math.radians(view['orbit'])
+        fwd = np.array([math.cos(elev) * math.cos(orbit), math.cos(elev) * math.sin(orbit),
+                        -math.sin(elev)])
+        target = np.array([0.0, 0.0, 0.0])
+        self.cam_pos = target - view['dist'] * fwd
+        right = np.cross(fwd, [0.0, 0.0, 1.0])
+        right /= np.linalg.norm(right)
+        self.fwd, self.right, self.down = fwd, right, np.cross(fwd, right)
+        self.f_px = (self.w / 2) / math.tan(math.radians(view['fov']) / 2)
+
+    def _to_px(self, pts):
+        """Vehicle points (N, 3) -> pixel (N, 2) float and in-front mask, perspective view."""
+        d = np.asarray(pts, dtype=np.float64) - self.cam_pos
+        depth = d @ self.fwd
+        ok = depth > 0.05
+        z = np.where(ok, depth, 1.0)
+        u = self.w / 2 + self.f_px * (d @ self.right) / z
+        v = self.h / 2 + self.f_px * (d @ self.down) / z
+        return np.stack([u, v], axis=-1), ok
+
+    def _draw_overlay_3d(self, config):
+        """Guide rectangles on the ground and the car as a box, seen by the virtual camera."""
+        h, w = self.h, self.w
+        overlay = np.zeros((h, w, 3), np.uint8)
+        mask = np.zeros((h, w), np.uint8)
+        lim = 4 * max(h, w)
+
+        def line(pts, color, thick=1):
+            px, ok = self._to_px(pts)
+            for a, b, oa, ob in zip(px[:-1], px[1:], ok[:-1], ok[1:]):
+                if oa and ob and np.all(np.abs(a) < lim) and np.all(np.abs(b) < lim):
+                    p1, p2 = tuple(int(round(c)) for c in a), tuple(int(round(c)) for c in b)
+                    cv2.line(overlay, p1, p2, color, thick, cv2.LINE_AA)
+                    cv2.line(mask, p1, p2, 255, thick, cv2.LINE_AA)
+
+        def rect(x0, y0, x1, y1, z=0.0, n=24):
+            edges = []
+            for (ax, ay), (bx, by) in (((x0, y0), (x0, y1)), ((x0, y1), (x1, y1)),
+                                       ((x1, y1), (x1, y0)), ((x1, y0), (x0, y0))):
+                tt = np.linspace(0.0, 1.0, n)
+                edges.append(np.stack([ax + (bx - ax) * tt, ay + (by - ay) * tt,
+                                       np.full(n, z)], axis=-1))
+            return edges
+
+        half_l, half_w = config['car_length'] / 2, config['car_width'] / 2
+        if config['show_grid']:
+            step = 0.5
+            for i in range(1, int(3.0 / step) + 1):
+                d = i * step
+                color = (60, 200, 255) if i == 1 else (200, 200, 200)
+                for edge in rect(half_l + d, half_w + d, -half_l - d, -half_w - d):
+                    line(edge, color)
+                px, ok = self._to_px([[half_l + d, half_w + d, 0.0]])
+                if d <= 2.0 and ok[0] and 0 <= px[0][0] < w - 30 and h * 0.2 <= px[0][1] < h:
+                    org = (int(px[0][0]) + 3, int(px[0][1]) - 3)
+                    cv2.putText(overlay, f'{d:.1f} m', org, cv2.FONT_HERSHEY_SIMPLEX, 0.35, color, 1, cv2.LINE_AA)
+                    cv2.putText(mask, f'{d:.1f} m', org, cv2.FONT_HERSHEY_SIMPLEX, 0.35, 255, 1, cv2.LINE_AA)
+
+        # The car: a box, its silhouette filled, top face and edges drawn on it.
+        ch = config['car_height']
+        corners = np.array([[sx * half_l, sy * half_w, sz * ch]
+                            for sz in (0, 1) for sx, sy in ((1, 1), (1, -1), (-1, -1), (-1, 1))])
+        px, ok = self._to_px(corners)
+        if ok.all() and np.all(np.abs(px) < lim):
+            hull = cv2.convexHull(np.round(px).astype(np.int32))
+            cv2.fillConvexPoly(overlay, hull, (70, 60, 55), cv2.LINE_AA)
+            cv2.fillConvexPoly(mask, hull, 255, cv2.LINE_AA)
+            top = np.round(px[4:]).astype(np.int32)
+            cv2.fillConvexPoly(overlay, top, (95, 85, 78), cv2.LINE_AA)
+            glass = np.array([[half_l * 0.55, half_w * 0.8, ch], [half_l * 0.55, -half_w * 0.8, ch],
+                              [half_l * 0.15, -half_w * 0.7, ch], [half_l * 0.15, half_w * 0.7, ch]])
+            gp, gok = self._to_px(glass)
+            if gok.all():
+                cv2.fillConvexPoly(overlay, np.round(gp).astype(np.int32), (150, 120, 90), cv2.LINE_AA)
+            nose = np.array([[half_l * 0.95, 0, ch], [half_l * 0.72, half_w * 0.35, ch],
+                             [half_l * 0.72, -half_w * 0.35, ch]])
+            npx, nok = self._to_px(nose)
+            if nok.all():
+                cv2.fillConvexPoly(overlay, np.round(npx).astype(np.int32), (60, 200, 255), cv2.LINE_AA)
+            for a, b in ((0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4),
+                         (0, 4), (1, 5), (2, 6), (3, 7)):
+                cv2.line(overlay, tuple(np.round(px[a]).astype(int)), tuple(np.round(px[b]).astype(int)),
+                         (200, 200, 200), 1, cv2.LINE_AA)
 
         alpha = cv2.merge([mask.astype(np.float32) / 255.0] * 3)
         return overlay, alpha

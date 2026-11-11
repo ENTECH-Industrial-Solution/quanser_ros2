@@ -53,10 +53,11 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
-from sensor_msgs.msg import BatteryState, CompressedImage, Image
-from std_msgs.msg import ColorRGBA, UInt8
+from sensor_msgs.msg import BatteryState, CompressedImage, Image, LaserScan
+from nav_msgs.msg import Odometry
+from std_msgs.msg import ColorRGBA, String, UInt8
 
-from qcar2_web import cloud3d, nav, obstacle, panel, person, surround, tuning
+from qcar2_web import cloud3d, learn, map3d, nav, obstacle, panel, person, surround, tuning
 
 # name, label, default topic, kind
 CAMERA_DEFAULTS = [
@@ -73,7 +74,16 @@ OBSTACLE_NAME = 'obstacle'
 OBSTACLE_RATE_HZ = 15.0
 PERSON_NAME = 'person'
 PERSON_RATE_HZ = 15.0
+DETECT_NAME = 'detect'
+DETECT_RATE_HZ = 10.0
 MAP_NAME = 'map'
+LIDAR_NAME = 'lidar'
+LIDAR_VIEW_PX = 640
+LED_EFFECTS = ('none', 'rainbow', 'cycle', 'chase', 'breathe')
+PROXIMITY_HZ = 5.0       # lidar distances for the driving dashboard
+PROXIMITY_MAX_M = 3.0
+PROXIMITY_SIDE_M = 0.05  # front/back: within the car width + this; left/right: within its length + this
+SENSOR_STALE_S = 1.0
 NAV_RATE_HZ = 5.0
 AUTO_MODES = ('avoid', 'follow', 'nav')
 
@@ -417,6 +427,17 @@ class PersonStream(ObstacleStream):
                               color_topic, PERSON_NAME)
 
 
+class DetectStream(ObstacleStream):
+    """Virtual camera: the RealSense colour image with the boxes of the trained detector.
+
+    The frames are drawn by QCar2WebNode._process_detect, only while someone watches.
+    """
+
+    def __init__(self, node, color_topic):
+        CameraStream.__init__(self, node, DETECT_NAME, 'Object detection (trained)',
+                              color_topic, DETECT_NAME)
+
+
 class MapStream(ObstacleStream):
     """Virtual camera: the SLAM map with the car, scan and plan.
 
@@ -425,6 +446,87 @@ class MapStream(ObstacleStream):
 
     def __init__(self, node, map_topic):
         CameraStream.__init__(self, node, MAP_NAME, 'Map (SLAM + Nav2)', map_topic, MAP_NAME)
+
+
+class LidarStream(CameraStream):
+    """Virtual camera: the lidar scan seen from above, car in the middle, forward up.
+
+    Subscribes to the scan only while someone watches; drawn at most max_fps.
+    The lidar sits lidar_x in front of the car centre, turned lidar_yaw (QCar2: 180 deg).
+    """
+
+    def __init__(self, node, topic, lidar_x, lidar_yaw_deg, radius_m):
+        super().__init__(node, LIDAR_NAME, 'Lidar (มุมบน)', topic, LIDAR_NAME)
+        self.lidar_x, self.lidar_yaw = lidar_x, math.radians(lidar_yaw_deg)
+        self.radius_m = radius_m
+        self._base = None
+
+    def _subscribe(self):
+        return self.node.create_subscription(LaserScan, self.topic, self._on_scan,
+                                             qos_profile_sensor_data,
+                                             callback_group=self.node.camera_group)
+
+    def _background(self, size, ppm):
+        """Range rings, spokes and the car: drawn once."""
+        img = np.full((size, size, 3), 18, np.uint8)
+        c = size // 2
+        for i in range(1, int(self.radius_m * 1.42) + 1):
+            r = int(round(i * ppm))
+            color = (70, 70, 70) if i % 2 else (95, 95, 95)
+            cv2.circle(img, (c, c), r, color, 1, cv2.LINE_AA)
+            d45 = int(r * 0.7071)
+            cv2.putText(img, f'{i} m', (c + d45 + 3, c - d45 - 3), cv2.FONT_HERSHEY_SIMPLEX, 0.42,
+                        (150, 150, 150), 1, cv2.LINE_AA)
+        for k in range(12):
+            a = k * math.pi / 6
+            cv2.line(img, (c, c), (int(c + size * math.cos(a)), int(c + size * math.sin(a))),
+                     (40, 40, 40), 1, cv2.LINE_AA)
+        hl, hw = 0.425 / 2 * ppm, 0.192 / 2 * ppm
+        body = np.array([[c - hw, c - hl], [c + hw, c - hl], [c + hw, c + hl], [c - hw, c + hl]],
+                        np.int32)
+        cv2.fillConvexPoly(img, body, (70, 60, 55), cv2.LINE_AA)
+        cv2.polylines(img, [body], True, (230, 230, 230), 1, cv2.LINE_AA)
+        nose = np.array([[c, c - hl * 0.95], [c - hw * 0.4, c - hl * 0.7], [c + hw * 0.4, c - hl * 0.7]],
+                        np.int32)
+        cv2.fillConvexPoly(img, nose, (60, 200, 255), cv2.LINE_AA)
+        cv2.putText(img, 'FRONT', (c - 24, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (60, 200, 255), 1,
+                    cv2.LINE_AA)
+        return img
+
+    def _on_scan(self, msg):
+        if self._rate_limited():
+            return
+        size = LIDAR_VIEW_PX
+        ppm = size / 2 / self.radius_m
+        if self._base is None:
+            self._base = self._background(size, ppm)
+        img = self._base.copy()
+        r = np.asarray(msg.ranges, np.float32)
+        a = msg.angle_min + np.arange(len(r), dtype=np.float32) * msg.angle_increment
+        ok = np.isfinite(r) & (r > max(msg.range_min, 0.05)) & (r < msg.range_max)
+        r, a = r[ok], a[ok] + self.lidar_yaw
+        x = self.lidar_x + r * np.cos(a)     # forward
+        y = r * np.sin(a)                    # left
+        # Hits on the car itself (mirrors, cables) are not obstacles.
+        body = (np.abs(x) < 0.425 / 2 + 0.03) & (np.abs(y) < 0.192 / 2 + 0.03)
+        x, y = x[~body], y[~body]
+        c = size / 2
+        u = np.round(c - y * ppm).astype(np.int32)
+        v = np.round(c - x * ppm).astype(np.int32)
+        inside = (u >= 1) & (u < size - 1) & (v >= 1) & (v < size - 1)
+        u, v, d = u[inside], v[inside], np.hypot(x, y)[inside]
+        if len(d):
+            # near = red, far = blue (OpenCV turbo colour map on distance)
+            lvl = np.clip(255 - d / (self.radius_m * 1.42) * 255, 0, 255).astype(np.uint8)
+            colors = cv2.applyColorMap(lvl.reshape(-1, 1), cv2.COLORMAP_TURBO).reshape(-1, 3)
+            for du in (0, 1):
+                for dv in (0, 1):
+                    img[v + dv, u + du] = colors
+        near = float(np.min(np.hypot(x, y))) if len(x) else None
+        label = f'{len(x)} pts' + (f'  nearest {near:.2f} m' if near is not None else '')
+        cv2.putText(img, label, (8, size - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1,
+                    cv2.LINE_AA)
+        self._encode_and_set(img)
 
 
 class DriveController:
@@ -543,7 +645,7 @@ class QCar2WebNode(Node):
         self.host = self.declare_parameter('host', '0.0.0.0').value
         self.port = int(self.declare_parameter('port', 8080).value)
         self.password = str(self.declare_parameter('password', '').value or '')
-        self.max_speed = float(self.declare_parameter('max_speed', 0.5).value)
+        self.max_speed = float(self.declare_parameter('max_speed', 1.5).value)
         self.max_steer = min(float(self.declare_parameter('max_steer', 0.5).value), 0.6)
         self.invert_steering = bool(self.declare_parameter('invert_steering', False).value)
         command_timeout = float(self.declare_parameter('command_timeout', 0.5).value)
@@ -580,8 +682,10 @@ class QCar2WebNode(Node):
             self, {side: self.cameras[side] for side in surround.SIDES}, surround_config)
         self.obstacle_stream = ObstacleStream(self, self.cameras['depth'].topic)
         self.person_stream = PersonStream(self, self.cameras['realsense'].topic)
+        self.detect_stream = DetectStream(self, self.cameras['realsense'].topic)
         self.cameras = {SURROUND_NAME: self.surround, **self.cameras,
-                        OBSTACLE_NAME: self.obstacle_stream, PERSON_NAME: self.person_stream}
+                        OBSTACLE_NAME: self.obstacle_stream, PERSON_NAME: self.person_stream,
+                        DETECT_NAME: self.detect_stream}
 
         self.drive = DriveController(command_timeout)
         self.last_output = None
@@ -623,7 +727,27 @@ class QCar2WebNode(Node):
         self.cloud = cloud3d.CloudStream(self, lambda: self.obstacles.config,
                                          lambda: self.nav.pose)
         self.map_stream = MapStream(self, self.nav.topics['map'])
+        self.map_clients = 0   # browser maps (/ws/map) drawing the map themselves
+        self.map3d = map3d.MapCloud(self)   # RTAB-Map's whole 3D map for the 3D view
         self.cameras[MAP_NAME] = self.map_stream
+        self.cameras[LIDAR_NAME] = LidarStream(
+            self, self.nav.topics['scan'],
+            lidar_x=self.declare_parameter('lidar_x', 0.1).value,
+            lidar_yaw_deg=self.declare_parameter('lidar_yaw_deg', 180.0).value,
+            radius_m=self.declare_parameter('lidar_view_radius', 4.0).value)
+        # Driving dashboard: measured speed (wheel odometry) and the nearest lidar return
+        # in front of / behind / beside the car, measured from the car's edges.
+        self._odom = None        # (speed m/s, time)
+        self._proximity = None   # ({side: metres or None}, time)
+        self._last_prox = 0.0
+        lidar = self.cameras[LIDAR_NAME]
+        self.create_subscription(
+            Odometry, self.declare_parameter('odom_topic', '/odom').value, self._on_odom,
+            qos_profile_sensor_data, callback_group=self.camera_group)
+        self.create_subscription(
+            LaserScan, self.nav.topics['scan'],
+            lambda msg: self._on_proximity_scan(msg, lidar.lidar_x, lidar.lidar_yaw),
+            qos_profile_sensor_data, callback_group=self.camera_group)
         self._was_nav = False
         self.create_timer(1.0 / NAV_RATE_HZ, self._process_nav,
                           callback_group=MutuallyExclusiveCallbackGroup())
@@ -635,6 +759,10 @@ class QCar2WebNode(Node):
         self.led_path = os.path.expanduser(self.declare_parameter(
             'led_config', '~/.ros/qcar2_web_led.json').value)
         self.led_pub = self.create_publisher(ColorRGBA, 'qcar2_led_color', QoSProfile(
+            depth=1, reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        # Animated effects drawn by qcar2_hardware itself (rainbow, ...), latched too.
+        self.led_effect_pub = self.create_publisher(String, 'qcar2_led_effect', QoSProfile(
             depth=1, reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.led = self._load_led()
@@ -672,6 +800,12 @@ class QCar2WebNode(Node):
         self.eco = panel.EcoSensors(self.get_logger(), self.declare_parameter(
             'eco_config', '~/.ros/qcar2_web_eco.json').value)
         self.create_timer(1.0, self._update_sensors, callback_group=MutuallyExclusiveCallbackGroup())
+        # Learn page: dataset capture, training jobs, and the live detector of the trained model.
+        self.learn = learn.Learn(self, {n: self.cameras[n].topic for n in learn.CAM_ORDER
+                                        if n in self.cameras})
+        self.create_timer(0.25, self._tick_learn, callback_group=MutuallyExclusiveCallbackGroup())
+        self.create_timer(1.0 / DETECT_RATE_HZ, self._process_detect,
+                          callback_group=MutuallyExclusiveCallbackGroup())
         # Own group: refresh() runs nmcli and systemctl.
         self.create_timer(PANEL_REFRESH_S, self._refresh_panel,
                           callback_group=MutuallyExclusiveCallbackGroup())
@@ -718,19 +852,30 @@ class QCar2WebNode(Node):
             self._update_lcd()
 
     def _load_led(self):
-        """Saved {'r','g','b' 0..255, 'brightness' 0..100}, or None (keep led_color_id)."""
+        """Saved {'r','g','b' 0..255, 'brightness' 0..100, 'effect', 'speed'}, or None (keep
+        led_color_id)."""
         try:
             with open(self.led_path) as f:
                 d = json.load(f)
-            return {k: max(0, min(255 if k != 'brightness' else 100, int(d[k])))
-                    for k in ('r', 'g', 'b', 'brightness')}
+            led = {k: max(0, min(255 if k != 'brightness' else 100, int(d[k])))
+                   for k in ('r', 'g', 'b', 'brightness')}
         except (OSError, ValueError, KeyError, TypeError):
             return None
+        led['effect'] = d.get('effect') if d.get('effect') in LED_EFFECTS else 'none'
+        try:
+            led['speed'] = max(0.1, min(5.0, float(d.get('speed', 1.0))))
+        except (TypeError, ValueError):
+            led['speed'] = 1.0
+        return led
 
     def _publish_led(self):
         led = self.led
         self.led_pub.publish(ColorRGBA(r=led['r'] / 255.0, g=led['g'] / 255.0, b=led['b'] / 255.0,
                                        a=led['brightness'] / 100.0))
+        effect = led.get('effect', 'none')
+        self.led_effect_pub.publish(String(data=(
+            f"{effect} {led.get('speed', 1.0):.2f} {led['brightness'] / 100.0:.2f} "
+            f"{led['r']} {led['g']} {led['b']}" if effect != 'none' else 'none')))
 
     def set_led(self, led):
         self.led = led
@@ -750,13 +895,32 @@ class QCar2WebNode(Node):
     def _sensors_wanted(self):
         """Which camera services something uses right now (for eco mode)."""
         cams = self.cameras
+        learn_cams = self.learn.wanted_cams()
         csi = self.surround._viewers > 0 or any(
-            cams[side]._viewers > 0 for side in surround.SIDES)
+            cams[side]._viewers > 0 or side in learn_cams for side in surround.SIDES)
         realsense = (cams['realsense']._viewers > 0 or cams['depth']._viewers > 0
                      or self._depth_wanted() or self._person_wanted()
-                     or self.cloud.viewers > 0
+                     or self.cloud.viewers > 0 or 'realsense' in learn_cams
                      or self.system.status()['nav_method'] == 'vslam')
         return {'csi': csi, 'realsense': realsense}
+
+    def _tick_learn(self):
+        lr = self.learn
+        lr.detect_watched = self.detect_stream.watched
+        lr.update_subscription()
+        lr.tick_auto()
+        lr.poll_job()
+        # Training shares the GPU with the self-driving modes: those win.
+        auto = self.drive.state_for(None)['auto']
+        if auto and lr.job is not None:
+            lr.stop_job(f'หยุดเพราะเริ่มโหมดอัตโนมัติ ({auto})')
+
+    def _process_detect(self):
+        if not self.detect_stream.watched:
+            return
+        img, _ = self.learn.run_detector()
+        if img is not None:
+            self.detect_stream._encode_and_set(img)
 
     def _update_sensors(self):
         self.eco.update(bool(self.system.status()['busy']), self._sensors_wanted())
@@ -919,7 +1083,7 @@ class QCar2WebNode(Node):
     def _process_nav(self):
         """Subscribe to the map, scan, plan and TF while needed and draw the map view."""
         watched = self.map_stream.watched
-        self.nav.set_wanted(watched or self.drive.state_for(None)['auto'] == 'nav'
+        self.nav.set_wanted(watched or self.map_clients > 0 or self.drive.state_for(None)['auto'] == 'nav'
                             or time.monotonic() < self.nav.keep_until or self.cloud.viewers > 0)
         if self.nav._subs is None:
             return
@@ -1020,6 +1184,37 @@ class QCar2WebNode(Node):
         self.motor_pub.publish(msg)
         self.last_output = {'steer_rad': steer_rad, 'speed_mps': speed_mps}
 
+    def _on_odom(self, msg):
+        self._odom = (float(msg.twist.twist.linear.x), time.monotonic())
+
+    def _on_proximity_scan(self, msg, lidar_x, lidar_yaw):
+        now = time.monotonic()
+        if now - self._last_prox < 1.0 / PROXIMITY_HZ:
+            return
+        self._last_prox = now
+        r = np.asarray(msg.ranges, np.float32)
+        a = msg.angle_min + np.arange(len(r), dtype=np.float32) * msg.angle_increment
+        ok = np.isfinite(r) & (r > max(msg.range_min, 0.05)) & (r < msg.range_max)
+        r, a = r[ok], a[ok] + lidar_yaw
+        x, y = lidar_x + r * np.cos(a), r * np.sin(a)
+        hl, hw, m = 0.425 / 2, 0.192 / 2, PROXIMITY_SIDE_M
+        body = (np.abs(x) < hl + 0.03) & (np.abs(y) < hw + 0.03)   # hits on the car itself
+        x, y = x[~body], y[~body]
+        sectors = {
+            'front': (x > hl) & (np.abs(y) < hw + m), 'back': (x < -hl) & (np.abs(y) < hw + m),
+            'left': (y > hw) & (np.abs(x) < hl + m), 'right': (y < -hw) & (np.abs(x) < hl + m),
+        }
+        dist = {'front': x - hl, 'back': -x - hl, 'left': y - hw, 'right': -y - hw}
+        out = {}
+        for side, sel in sectors.items():
+            d = dist[side][sel]
+            d = d[d < PROXIMITY_MAX_M]
+            out[side] = round(float(d.min()), 2) if len(d) else None
+        self._proximity = (out, now)
+
+    def _fresh(self, value):
+        return value[0] if value is not None and time.monotonic() - value[1] < SENSOR_STALE_S else None
+
     def status_for(self, client_id):
         status = self.drive.state_for(client_id)
         status.update({
@@ -1031,6 +1226,8 @@ class QCar2WebNode(Node):
             'nav': self.nav.status() if self.nav._subs is not None else None,
             'system': self.system.status(),
             'eco': self.eco.status(),
+            'speed': self._fresh(self._odom),
+            'proximity': self._fresh(self._proximity),
         })
         return status
 
@@ -1057,6 +1254,16 @@ async def auth_middleware(request, handler):
 async def index_handler(request):
     return web.FileResponse(os.path.join(request.app['static_dir'], 'index.html'),
                             headers={'Cache-Control': 'no-cache'})
+
+
+async def static_script_handler(request):
+    """The page's own scripts: like index.html, the browser must check for a newer copy every
+    time, or after an update it keeps running the old code behind the new page."""
+    name = request.match_info['name']
+    path = os.path.join(request.app['static_dir'], name)
+    if not os.path.isfile(path):
+        raise web.HTTPNotFound()
+    return web.FileResponse(path, headers={'Cache-Control': 'no-cache'})
 
 
 async def info_handler(request):
@@ -1203,7 +1410,8 @@ async def system_post_handler(request):
 
 
 async def led_handler(request):
-    """GET: the LED strip colour. POST {"r","g","b": 0..255, "brightness": 0..100}: set it."""
+    """GET: the LED strip colour. POST {"r","g","b": 0..255, "brightness": 0..100,
+    "effect": one of LED_EFFECTS (optional), "speed": 0.1..5 (optional)}: set it."""
     node = request.app['node']
     if request.method == 'POST':
         try:
@@ -1213,6 +1421,13 @@ async def led_handler(request):
             raise web.HTTPBadRequest(text='expected {"r","g","b": 0..255, "brightness": 0..100}')
         if not all(0 <= led[k] <= 255 for k in 'rgb') or not 0 <= led['brightness'] <= 100:
             raise web.HTTPBadRequest(text='out of range')
+        led['effect'] = body.get('effect', 'none')
+        if led['effect'] not in LED_EFFECTS:
+            raise web.HTTPBadRequest(text=f'effect must be one of {LED_EFFECTS}')
+        try:
+            led['speed'] = max(0.1, min(5.0, float(body.get('speed', 1.0))))
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text='bad speed')
         try:
             node.set_led(led)
         except OSError as e:
@@ -1459,6 +1674,85 @@ async def ws_cloud_handler(request):
     return ws
 
 
+async def ws_map_handler(request):
+    """Map data for the browser to draw itself (like RViz): the occupancy grid as a PNG whenever
+    it changes ({"type": "grid", ...} then the PNG as a binary message), and 5 times a second
+    the car pose, lidar scan, Nav2 path and goal in map metres ({"type": "map_state", ...})."""
+    node = request.app['node']
+    ws = web.WebSocketResponse(heartbeat=5.0)
+    await ws.prepare(request)
+    node.map_clients += 1
+
+    async def sender():
+        sent_ver = None
+        loop = asyncio.get_running_loop()
+        try:
+            while not ws.closed:
+                if node.nav.grid_version != sent_ver:
+                    ver, head, png = await loop.run_in_executor(None, node.nav.grid_png)
+                    sent_ver = ver
+                    await ws.send_str(json.dumps({'type': 'grid', 'version': ver, 'grid': head}))
+                    if png is not None:
+                        await ws.send_bytes(png)
+                snap = await loop.run_in_executor(None, node.nav.snapshot)
+                snap['type'] = 'map_state'
+                await ws.send_str(json.dumps(snap))
+                await asyncio.sleep(1.0 / NAV_RATE_HZ)
+        except (ConnectionResetError, ConnectionError, RuntimeError):
+            pass
+
+    task = asyncio.ensure_future(sender())
+    try:
+        async for _ in ws:
+            pass
+    finally:
+        task.cancel()
+        node.map_clients -= 1
+    return ws
+
+
+async def ws_map3d_handler(request):
+    """RTAB-Map's 3D map (see map3d.py): each node cloud once as a binary message, then the node
+    poses ({"type": "poses"}) whenever they change; {"type": "reset"} when the clouds start over,
+    and a {"type": "status"} every second."""
+    mc = request.app['node'].map3d
+    ws = web.WebSocketResponse(heartbeat=5.0)
+    await ws.prepare(request)
+    mc.add_viewer()
+
+    async def sender():
+        session, sent, sent_ver, last_status = None, 0, None, 0.0
+        try:
+            while not ws.closed:
+                sess, order, nodes, poses, ver = mc.snapshot()
+                if sess != session:
+                    session, sent, sent_ver = sess, 0, None
+                    await ws.send_str('{"type": "reset"}')
+                while sent < len(order) and not ws.closed:
+                    await ws.send_bytes(nodes[order[sent]])
+                    sent += 1
+                if ver != sent_ver:
+                    sent_ver = ver
+                    await ws.send_str(json.dumps({'type': 'poses', 'poses': poses}))
+                now = time.monotonic()
+                if now - last_status > 1.0:
+                    last_status = now
+                    await ws.send_str(json.dumps({'type': 'status', 'available': mc.available,
+                                                  'receiving': mc.receiving, 'nodes': len(order)}))
+                await asyncio.sleep(0.5)
+        except (ConnectionResetError, ConnectionError, RuntimeError):
+            pass
+
+    task = asyncio.ensure_future(sender())
+    try:
+        async for _ in ws:
+            pass
+    finally:
+        task.cancel()
+        mc.remove_viewer()
+    return ws
+
+
 async def _push_status(ws, node, client_id):
     try:
         while not ws.closed:
@@ -1468,37 +1762,44 @@ async def _push_status(ws, node, client_id):
         pass
 
 
+def _picked_pose(node, data):
+    """Pose picked on a map: x0/y0 -> x1/y1 in map metres (browser map), or u0/v0 -> u1/v1 as
+    fractions of the rendered frame. Returns 'bad', None (no map) or (x, y, yaw)."""
+    if 'x0' in data:
+        c = [_finite_or_none(data.get(k)) for k in ('x0', 'y0', 'x1', 'y1')]
+        return 'bad' if None in c else node.nav.goal_from_world(c[:2], c[2:])
+    c = [_finite_or_none(data.get(k)) for k in ('u0', 'v0', 'u1', 'v1')]
+    return 'bad' if None in c else node.nav.goal_from_view(*c)
+
+
 async def _nav_goal(node, client_id, data, ws):
-    """Goal picked on the map: u0/v0 = position, u1/v1 = heading, as fractions of the frame."""
-    coords = [_finite_or_none(data.get(k)) for k in ('u0', 'v0', 'u1', 'v1')]
+    """Goal picked on the map (see _picked_pose)."""
+    goal = _picked_pose(node, data)
     error = None
-    if None in coords:
+    if goal == 'bad':
         error = 'พิกัดไม่ถูกต้อง'
     elif node.drive.state_for(client_id)['control'] != 'me':
         error = 'ต้องรับสิทธิ์ควบคุมก่อน'
+    elif goal is None:
+        error = 'ยังไม่มีแผนที่'
     else:
-        goal = node.nav.goal_from_view(*coords)
-        if goal is None:
-            error = 'ยังไม่มีแผนที่'
-        else:
-            error = node.nav.send_goal(*goal)
-            if error is None and not node.drive.set_auto(client_id, 'nav'):
-                node.nav.cancel()
-                error = 'ส่งเป้าหมายไม่ได้ (E-STOP?)'
+        error = node.nav.send_goal(*goal)
+        if error is None and not node.drive.set_auto(client_id, 'nav'):
+            node.nav.cancel()
+            error = 'ส่งเป้าหมายไม่ได้ (E-STOP?)'
     if error:
         await ws.send_str(json.dumps({'type': 'nav_error', 'text': error}))
 
 
 async def _nav_initial_pose(node, data, ws):
     """Start pose for AMCL picked on the map, like _nav_goal."""
-    coords = [_finite_or_none(data.get(k)) for k in ('u0', 'v0', 'u1', 'v1')]
+    pose = _picked_pose(node, data)
     error = None
-    if None in coords:
+    if pose == 'bad':
         error = 'พิกัดไม่ถูกต้อง'
     elif node.system.status()['nav_mode'] != 'nav':
         error = 'ตั้งตำแหน่งรถได้เฉพาะตอนนำทางบนแผนที่ที่โหลด'
     else:
-        pose = node.nav.goal_from_view(*coords)
         if pose is None:
             error = 'ยังไม่มีแผนที่'
         else:
@@ -1552,6 +1853,184 @@ async def ws_handler(request):
     return ws
 
 
+# ---------------------------------------------------------------- learn (object detection)
+def _learn_call(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except (ValueError, KeyError, TypeError, IndexError) as e:
+        raise web.HTTPBadRequest(text=str(e) or type(e).__name__)
+    except OSError as e:
+        raise web.HTTPInternalServerError(text=f'{e.strerror or e}')
+
+
+async def _learn_body(request):
+    try:
+        body = await request.json()
+    except ValueError:
+        raise web.HTTPBadRequest(text='invalid JSON')
+    if not isinstance(body, dict):
+        raise web.HTTPBadRequest(text='expected an object')
+    return body
+
+
+async def learn_status_handler(request):
+    """GET ?ds=name: datasets, the dataset's classes/counts/runs, the job, auto capture, detector.
+    Polling it also keeps the RealSense colour image subscribed (the capture preview)."""
+    node = request.app['node']
+    lr = node.learn
+    lr.want_camera()
+    loop = asyncio.get_running_loop()
+
+    def build():
+        names = lr.datasets()
+        ds = request.query.get('ds') or ''
+        if ds not in names:
+            ds = names[0]
+        auto = {k: v for k, v in lr.auto.items() if k != 'last'}
+        return {
+            'datasets': names, 'ds': ds, 'classes': lr.classes(ds), 'counts': lr.counts(ds),
+            'runs': lr.runs(ds), 'job': lr.job_status(), 'last_job': lr.last_job,
+            'auto': auto, 'active': lr.active, 'helper': lr.helper(ds),
+            'autolabel': lr.autolabel_state if lr.autolabel_state and lr.autolabel_state.get('ds') == ds else None,
+            'detect': {k: v for k, v in lr.detect.items()},
+            'camera': lr.camera_status(),
+            'drive_auto': node.drive.state_for(None)['auto'],
+            'nav_method': node.system.status().get('nav_method'),
+        }
+    return web.json_response(await loop.run_in_executor(None, lambda: _learn_call(build)))
+
+
+async def learn_images_handler(request):
+    lr = request.app['node'].learn
+    ds = request.query.get('ds', '')
+    return web.json_response({'images': _learn_call(lr.images, ds)})
+
+
+async def learn_image_handler(request):
+    """GET /api/learn/image/{ds}/{id}.jpg[?thumb=1]"""
+    lr = request.app['node'].learn
+    ds, i = request.match_info['ds'], request.match_info['id']
+    if request.query.get('thumb'):
+        data = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: _learn_call(lr.thumb, ds, i))
+        if data is None:
+            raise web.HTTPNotFound()
+        return web.Response(body=data, content_type='image/jpeg',
+                            headers={'Cache-Control': 'max-age=86400'})
+    path = _learn_call(lr.image_path, ds, i)
+    if not os.path.exists(path):
+        raise web.HTTPNotFound()
+    return web.FileResponse(path, headers={'Cache-Control': 'max-age=86400'})
+
+
+async def learn_mask_handler(request):
+    """POST /api/learn/mask2poly with a PNG body (alpha = painted area): {"polys": [...]}."""
+    data = await request.read()
+    if not data or len(data) > 20 * 1024 * 1024:
+        raise web.HTTPBadRequest(text='expected a PNG mask')
+    lr = request.app['node'].learn
+    polys = await asyncio.get_running_loop().run_in_executor(
+        None, lambda: _learn_call(lr.mask_to_polys, data))
+    return web.json_response({'polys': polys})
+
+
+async def learn_post_handler(request):
+    """POST /api/learn/{action} with a JSON body; see the cases below."""
+    node = request.app['node']
+    lr = node.learn
+    action = request.match_info['action']
+    body = await _learn_body(request)
+    ds = body.get('ds', '')
+    loop = asyncio.get_running_loop()
+
+    def run(fn, *args, **kw):
+        return loop.run_in_executor(None, lambda: _learn_call(fn, *args, **kw))
+
+    if action == 'dataset':
+        if body.get('delete'):
+            await run(lr.delete_dataset, ds)
+        else:
+            await run(lr.create_dataset, body.get('name', ''))
+        return web.json_response({'datasets': lr.datasets()})
+    if action == 'classes':
+        return web.json_response({'classes': await run(lr.edit_classes, ds, body)})
+    if action == 'capture':
+        ids, why = await run(lr.capture, ds)
+        if not ids:
+            raise web.HTTPConflict(text='ถ่ายไม่ได้: ' + ', '.join(
+                f'{learn.CAM_LABELS.get(c, c)} {w}' for c, w in why.items()))
+        return web.json_response({'ids': ids, 'id': ids[0], 'why': why})
+    if action == 'cams':
+        await run(lr.set_cams, body.get('cams'), body.get('view'))
+        return web.json_response(lr.camera_status())
+    if action == 'auto':
+        await run(lr.set_auto, bool(body.get('on')), ds, body.get('interval'))
+        return web.json_response({'auto': {k: v for k, v in lr.auto.items() if k != 'last'}})
+    if action == 'label':
+        i = body.get('id', '')
+        if body.get('clear'):
+            await run(lr.clear_label, ds, i)
+        elif 'boxes' in body:
+            await run(lr.set_label, ds, i, body['boxes'], body.get('polys'))
+        return web.json_response(await run(lr.get_label, ds, i))
+    if action == 'delete':
+        ids = body.get('ids') or []
+        if not isinstance(ids, list):
+            raise web.HTTPBadRequest(text='ids must be a list')
+        return web.json_response({'deleted': await run(lr.delete_images, ds, ids)})
+    if action == 'suggest':
+        conf = float(body.get('conf', 0.35))
+        only = body.get('only')
+        if only is not None and not isinstance(only, list):
+            raise web.HTTPBadRequest(text='only must be a list')
+        return web.json_response(await run(lr.suggest, ds, body.get('id', ''), conf, only))
+    if action == 'train':
+        if node.drive.state_for(None)['auto']:
+            raise web.HTTPConflict(text='รถอยู่ในโหมดอัตโนมัติ หยุดโหมดนั้นก่อนค่อย train')
+        run_name = await run(lr.start_train, ds, body.get('size', 's'), body.get('epochs', 50),
+                             body.get('imgsz', 640), body.get('batch', 16), body.get('from_run'),
+                             bool(body.get('quick')), body.get('patience'),
+                             body.get('task', 'detect'))
+        return web.json_response({'run': run_name})
+    if action == 'export':
+        if node.drive.state_for(None)['auto']:
+            raise web.HTTPConflict(text='รถอยู่ในโหมดอัตโนมัติ หยุดโหมดนั้นก่อน')
+        await run(lr.start_export, ds, body.get('run', ''))
+        return web.json_response({'ok': True})
+    if action == 'stop':
+        return web.json_response({'stopped': await run(lr.stop_job, 'หยุดจากหน้าเว็บ')})
+    if action == 'active':
+        return web.json_response({'active': await run(
+            lr.set_active, ds if body.get('run') else None, body.get('run'))})
+    if action == 'delete_run':
+        await run(lr.delete_run, ds, body.get('run', ''))
+        return web.json_response({'ok': True})
+    if action == 'wand':
+        png, frac = await run(lr.wand, ds, body.get('id', ''), body.get('x', 0), body.get('y', 0),
+                              body.get('tol', 20))
+        return web.Response(body=png, content_type='image/png',
+                            headers={'X-Area': f'{frac:.5f}', 'Cache-Control': 'no-store'})
+    if action == 'helper':
+        return web.json_response({'helper': await run(lr.set_helper, ds, str(body.get('mode', 'auto')))})
+    if action == 'autolabel':
+        if body.get('cancel'):
+            lr._auto_cancel = True
+            return web.json_response({'ok': True})
+        if body.get('clear'):
+            return web.json_response({'cleared': await run(lr.clear_pending, ds)})
+        if node.drive.state_for(None)['auto']:
+            raise web.HTTPConflict(text='รถอยู่ในโหมดอัตโนมัติ หยุดโหมดนั้นก่อน')
+        only = body.get('only')
+        if only is not None and not isinstance(only, list):
+            raise web.HTTPBadRequest(text='only must be a list')
+        return web.json_response(await run(lr.autolabel, ds, float(body.get('conf', 0.4)), only,
+                                           bool(body.get('redo'))))
+    if action == 'detect':
+        lr.detect['conf'] = min(0.95, max(0.05, float(body.get('conf', lr.detect['conf']))))
+        return web.json_response({'conf': lr.detect['conf']})
+    raise web.HTTPNotFound()
+
+
 def make_app(node):
     app = web.Application(middlewares=[auth_middleware])
     app['node'] = node
@@ -1576,9 +2055,17 @@ def make_app(node):
     app.router.add_get('/api/led', led_handler)
     app.router.add_post('/api/led', led_handler)
     app.router.add_post('/api/system', system_post_handler)
+    app.router.add_get('/api/learn', learn_status_handler)
+    app.router.add_get('/api/learn/images', learn_images_handler)
+    app.router.add_get('/api/learn/image/{ds}/{id}.jpg', learn_image_handler)
+    app.router.add_post('/api/learn/mask2poly', learn_mask_handler)   # before the generic route
+    app.router.add_post('/api/learn/{action}', learn_post_handler)
     app.router.add_get('/ws', ws_handler)
     app.router.add_get('/ws/stream/{name}', ws_stream_handler)
     app.router.add_get('/ws/cloud', ws_cloud_handler)
+    app.router.add_get('/ws/map', ws_map_handler)
+    app.router.add_get('/ws/map3d', ws_map3d_handler)
+    app.router.add_get(r'/static/{name:[a-z0-9_]+\.js}', static_script_handler)
     app.router.add_static('/static/', app['static_dir'])
     return app
 
