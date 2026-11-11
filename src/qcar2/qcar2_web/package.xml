@@ -7,6 +7,7 @@
   <maintainer email="robots.entech@gmail.com">nvidia</maintainer>
   <license>Apache-2.0</license>
 
+  <exec_depend>robot_web_ui</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>

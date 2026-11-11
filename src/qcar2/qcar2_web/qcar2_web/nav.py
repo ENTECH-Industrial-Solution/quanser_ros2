@@ -196,6 +196,7 @@ class NavBridge:
         self._tf_listener = None
         self._grid = None      # (data int8 HxW, origin x, origin y, resolution)
         self._grid_time = 0.0
+        self.grid_version = 0  # +1 whenever the grid content changes (for the browser map)
         self._scan = None
         self._plan = None
         self._cmd = None       # (v, w, monotonic time)
@@ -256,6 +257,7 @@ class NavBridge:
         with self._lock:
             self._grid = None
             self.map_stats = None
+            self.grid_version += 1
 
     def _on_map(self, msg):
         data = np.array(msg.data, dtype=np.int8).reshape(msg.info.height, msg.info.width)
@@ -270,9 +272,14 @@ class NavBridge:
                      'area_m2': round(float(np.count_nonzero(data == 0) * res * res), 1),
                      'resolution': round(float(res), 3)}
         with self._lock:
+            old = self._grid
+            changed = (old is None or old[1:] != (o.x, o.y, msg.info.resolution)
+                       or old[0].shape != data.shape or not np.array_equal(old[0], data))
             self._grid = (data, o.x, o.y, msg.info.resolution)
             self._grid_time = time.monotonic()
             self.map_stats = stats
+            if changed:
+                self.grid_version += 1
 
     def _on_scan(self, msg):
         with self._lock:
@@ -296,6 +303,52 @@ class NavBridge:
                 tf2_ros.ExtrapolationException):
             return None
 
+    def _scan_points(self, scan_msg):
+        """Lidar returns in the map frame (Nx2), or None."""
+        if scan_msg is None:
+            return None
+        st = self._lookup(scan_msg.header.frame_id or 'base_scan')
+        if st is None:
+            return None
+        r = np.asarray(scan_msg.ranges, np.float32)
+        a = scan_msg.angle_min + np.arange(len(r), dtype=np.float32) * scan_msg.angle_increment
+        ok = np.isfinite(r) & (r > scan_msg.range_min) & (r < scan_msg.range_max)
+        r, a = r[ok], a[ok] + st[2]
+        return np.stack([st[0] + r * np.cos(a), st[1] + r * np.sin(a)], axis=1)
+
+    def grid_png(self):
+        """(version, header dict, PNG bytes) of the grid for the browser map, or (version, None, None).
+
+        One grey channel: 255 = unknown, else the occupancy 0..100. PNG row 0 = grid row 0 (y = oy).
+        """
+        with self._lock:
+            grid, ver = self._grid, self.grid_version
+        if grid is None:
+            return ver, None, None
+        data, ox, oy, res = grid
+        img = np.where(data < 0, 255, np.clip(data, 0, 100)).astype(np.uint8)
+        ok, png = cv2.imencode('.png', img)
+        head = {'w': int(data.shape[1]), 'h': int(data.shape[0]), 'ox': float(ox), 'oy': float(oy),
+                'res': float(res)}
+        return ver, head, (png.tobytes() if ok else None)
+
+    def snapshot(self, max_scan=720):
+        """Everything the browser map draws besides the grid: car pose, scan, plan, goal (metres, map frame)."""
+        with self._lock:
+            scan_msg, plan = self._scan, self._plan
+        scan = self._scan_points(scan_msg)
+        pts = []
+        if scan is not None and len(scan):
+            step = max(1, len(scan) // max_scan)
+            pts = np.round(scan[::step], 3).ravel().tolist()
+        path = []
+        if plan:
+            step = max(1, len(plan) // 400)
+            path = [round(v, 3) for p in plan[::step] + [plan[-1]] for v in p]
+        active = self.state in ('sending', 'active')
+        return {'pose': list(self.pose) if self.pose else None, 'scan': pts, 'plan': path,
+                'goal': list(self.goal) if (self.goal and active) else None, 'state': self.state}
+
     # ------------------------------------------------------------ drawing
     def update(self, render, car_length, car_width):
         """Refresh the pose; with render, return a new frame (BGR) or None if there is no map."""
@@ -306,15 +359,7 @@ class NavBridge:
             grid, scan_msg, plan = self._grid, self._scan, self._plan
         if grid is None:
             return None
-        scan = None
-        if scan_msg is not None:
-            st = self._lookup(scan_msg.header.frame_id or 'base_scan')
-            if st is not None:
-                r = np.asarray(scan_msg.ranges, np.float32)
-                a = scan_msg.angle_min + np.arange(len(r), dtype=np.float32) * scan_msg.angle_increment
-                ok = np.isfinite(r) & (r > scan_msg.range_min) & (r < scan_msg.range_max)
-                r, a = r[ok], a[ok] + st[2]
-                scan = np.stack([st[0] + r * np.cos(a), st[1] + r * np.sin(a)], axis=1)
+        scan = self._scan_points(scan_msg)
         extra = [self.pose[:2]] if self.pose else []
         if self.goal and self.state in ('sending', 'active'):
             extra.append(self.goal[:2])
@@ -355,6 +400,10 @@ class NavBridge:
         p1 = self.view_to_world(u1, v1)
         if p0 is None:
             return None
+        return self.goal_from_world(p0, p1)
+
+    def goal_from_world(self, p0, p1):
+        """Goal at p0 (map metres) facing p1; a click without a drag faces away from the car."""
         dx, dy = p1[0] - p0[0], p1[1] - p0[1]
         if math.hypot(dx, dy) < 0.15:   # a click, not a drag: face away from the car
             if self.pose is None:

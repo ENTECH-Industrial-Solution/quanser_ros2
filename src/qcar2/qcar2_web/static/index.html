@@ -1,282 +1,30 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" data-store="qcar2">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f1216">
 <meta name="color-scheme" content="dark">
 <title>QCar2 Web</title>
-<style>
-  :root {
-    --bg: #0f1216; --panel: #181d23; --line: #2a313a; --text: #e6e9ee; --muted: #8b95a3;
-    --accent: #3b8cff; --ok: #2fbf71; --warn: #f0a92b; --bad: #e5484d;
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); overscroll-behavior-y: none; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", sans-serif; }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
-           padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
-           position: sticky; top: 0; z-index: 5; }
-  header h1 { font-size: 16px; margin: 0 8px 0 0; }
-  .chip { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
-          font-size: 12px; white-space: nowrap; }
-  .chip.ok { color: var(--ok); border-color: var(--ok); }
-  .chip.warn { color: var(--warn); border-color: var(--warn); }
-  .chip.bad { color: #fff; background: var(--bad); border-color: var(--bad); }
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; }
-  /* Control panel follows the scroll (sticky below the header) and scrolls on its own if taller than the screen. */
-  main > aside { position: sticky; top: calc(var(--hdr-h, 56px) + 16px); align-self: start;
-                 max-height: calc(100vh - var(--hdr-h, 56px) - 32px); overflow-y: auto;
-                 overscroll-behavior: contain; scrollbar-width: none; -ms-overflow-style: none; }
-  main > aside::-webkit-scrollbar { display: none; }
-  main.ctrl-left { grid-template-columns: 340px minmax(0, 1fr); }
-  main.ctrl-left > aside { order: -1; }
-  .side-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
-  .side-bar button { padding: 4px 10px; font-size: 12px; }
-  #dock, #btn-sheet-close { display: none; }
-  button, a, input, select, label { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-  .cam { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .cam-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; gap: 8px; }
-  .cam-head span { font-weight: 600; }
-  .cam-head small { color: var(--muted); font-size: 11px; display: block; font-weight: 400;
-                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .view { aspect-ratio: 2 / 1; background: #000; display: grid; place-items: center; color: var(--muted); }
-  .view img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  button { font: inherit; color: var(--text); background: #232a33; border: 1px solid var(--line);
-           border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-  button:hover { border-color: var(--accent); }
-  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
-  .stack > * + * { margin-top: 14px; }
-  .estop { width: 100%; padding: 16px; font-size: 18px; font-weight: 700; color: #fff;
-           background: var(--bad); border-color: var(--bad); border-radius: 10px; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .row > button { flex: 1; }
-  #pad { position: relative; width: 100%; max-width: 260px; aspect-ratio: 1; margin: 0 auto;
-         border-radius: 50%; background: radial-gradient(circle, #222a33 0%, #161b21 70%);
-         border: 1px solid var(--line); touch-action: none; user-select: none; }
-  #pad.disabled { opacity: .35; }
-  #pad::before, #pad::after { content: ""; position: absolute; background: var(--line); }
-  #pad::before { left: 50%; top: 10%; bottom: 10%; width: 1px; }
-  #pad::after { top: 50%; left: 10%; right: 10%; height: 1px; }
-  #knob { position: absolute; width: 64px; height: 64px; left: 50%; top: 50%; margin: -32px 0 0 -32px;
-          border-radius: 50%; background: var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.5);
-          z-index: 1; pointer-events: none; }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-variant-numeric: tabular-nums; }
-  .kv dt { color: var(--muted); }
-  .kv dd { margin: 0; text-align: right; }
-  .hint { color: var(--muted); font-size: 12px; }
-  kbd { border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; }
-  input[type=range] { width: 100%; }
-  .surround { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 12px; margin-bottom: 16px; }
-  @media (max-width: 700px) { .surround { grid-template-columns: 1fr; } }
-  .surround .view.bev { aspect-ratio: 1 / 1; }
-  .seg { display: flex; gap: 4px; flex-wrap: wrap; }
-  .seg button { padding: 4px 10px; font-size: 12px; }
-  details.calib { margin-bottom: 16px; }
-  details.calib summary { cursor: pointer; color: var(--muted); }
-  .sliders { display: grid; grid-template-columns: 90px minmax(0, 1fr) 76px; gap: 6px 10px; align-items: center; margin-top: 10px; }
-  .sliders input[type=number] { width: 100%; font: inherit; font-variant-numeric: tabular-nums; text-align: right;
-                                color: var(--text); background: #232a33; border: 1px solid var(--line);
-                                border-radius: 6px; padding: 3px 6px; }
-  .calib-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; margin-top: 12px; }
-  @media (max-width: 1100px) { .calib-layout { grid-template-columns: 1fr; } }
-  /* The preview stays on screen while scrolling through the sliders. */
-  .calib-preview { position: sticky; top: 64px; align-self: start; display: grid; gap: 8px; }
-  .calib-preview .view { border-radius: 8px; overflow: hidden; }
-  .calib-preview .view.bev { aspect-ratio: 1 / 1; max-height: 60vh; }
-  @media (max-width: 1100px) { .calib-preview { position: static; } }
-  .obs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; margin-bottom: 16px; }
-  @media (max-width: 700px) { .obs { grid-template-columns: 1fr; } }
-  .obs .view.top { aspect-ratio: 1 / 1; }
-  .obs .view.person { aspect-ratio: 16 / 9; }
-  .obs .sliders { grid-template-columns: 120px minmax(0, 1fr) 76px; }
-  button.auto-on { background: var(--ok); border-color: var(--ok); color: #fff; }
-  .obs .view.map { aspect-ratio: 1 / 1; position: relative; touch-action: none; }
-  .view.map.pick { cursor: crosshair; }
-  /* Stop the browser's own image drag / text selection so click-and-drag sets the arrow. */
-  .view.map, .view.map img { user-select: none; -webkit-user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
-  .view.map img { pointer-events: none; }
-  .view.map canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  input[type=text] { font: inherit; color: var(--text); background: #232a33; border: 1px solid var(--line);
-                     border-radius: 8px; padding: 5px 8px; flex: 1; min-width: 0; }
-  nav.jump { display: flex; gap: 4px; flex-wrap: wrap; }
-  nav.jump a { color: var(--text); text-decoration: none; font-size: 13px; padding: 4px 10px;
-               border: 1px solid var(--line); border-radius: 8px; background: #232a33; }
-  nav.jump a:hover { border-color: var(--accent); }
-  main h2[id] { scroll-margin-top: 110px; }
-  select { font: inherit; color: var(--text); background: #232a33; border: 1px solid var(--line);
-           border-radius: 8px; padding: 5px 8px; }
-  .led-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
-  .led-swatches button { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
-  .led-swatches button.off { width: auto; border-radius: 14px; padding: 0 10px; font-size: 12px; }
-  /* ---------- Map / SLAM / Nav2 section ---------- */
-  .cloud-wrap { position: relative; aspect-ratio: 16 / 9; max-height: 75vh; background: #0b0e12; }
-  .cloud-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; cursor: grab; }
-  .cloud-wrap canvas:active { cursor: grabbing; }
-  .cloud-msg { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center;
-               color: var(--muted); pointer-events: none; padding: 0 16px; }
-  .cloud-msg:empty { display: none; }
-  .cloud-bar { flex-wrap: wrap; gap: 8px 14px; padding: 8px 10px; align-items: center; }
-  .cloud-bar .row { display: inline-flex; gap: 6px; align-items: center; }
-  .mapx { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; margin-bottom: 16px; align-items: start; }
-  @media (max-width: 1100px) { .mapx { grid-template-columns: 1fr; } }
-  /* Right column: the tabs/parameters, then the 3D view under them. */
-  .mapx-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  /* Wide screens: two equal columns of one fixed height, top and bottom edges aligned. The
-     2D map fills the left column; on the right the parameter panel scrolls inside itself and
-     the 3D view takes the rest. Switching tabs therefore never resizes the map. */
-  @media (min-width: 1101px) {
-    .mapx { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch;
-            height: min(88vh, 900px); }
-    .mapx > .cam { display: flex; flex-direction: column; min-height: 0; }
-    .mapx > .cam > .view.map { flex: 1 1 auto; aspect-ratio: auto; max-height: none; min-height: 0; }
-    .mapx-side { min-height: 0; }
-    .mapx-side > .panel { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
-    .mapx-side > .cloud3d { flex: 1 0 300px; display: flex; flex-direction: column; min-height: 0; }
-    .mapx-side > .cloud3d > .cloud-wrap { flex: 1 1 auto; aspect-ratio: auto; max-height: none; min-height: 0; }
-  }
-  .mapx .view.map { aspect-ratio: 1 / 1; position: relative; touch-action: none; max-height: 80vh; }
-  .map-bar { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 10px; }
-  .mapx .cam-head small { white-space: normal; }
-  .mapx .cam-head > div { min-width: 0; }
-  .mapx .cam > .hint { margin: 0; padding: 0 10px 8px; }
-  .mode-line { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
-  .method { margin-top: 10px; }
-  .method .seg { flex-wrap: nowrap; }
-  .method .seg button { flex: 1; text-align: left; line-height: 1.25; padding: 8px 10px; font-size: 13px; }
-  .method .seg button small { display: block; opacity: .75; font-size: 11px; }
-  .method .hint { margin: 6px 0 0; }
-  .tabs { display: flex; gap: 2px; margin: 12px 0 10px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 10px; white-space: nowrap; color: var(--muted); }
-  .tabs button.on, .tabs button.on:hover { color: var(--text); border-bottom-color: var(--accent); background: none; }
-  .tabpane[hidden] { display: none; }
-  .tabpane > * + * { margin-top: 10px; }
-  .tabpane p { margin: 0; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.danger { color: var(--bad); }
-  ol.steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 12.5px; }
-  ol.steps li + li { margin-top: 3px; }
-  .map-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #1d232a; }
-  .map-card.current { border-color: var(--ok); }
-  .map-card .meta { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
-  .map-card .title { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-  .map-card .row > button { padding: 5px 8px; font-size: 12.5px; }
-  .badge { font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
-  .badge.ok { color: var(--ok); border-color: var(--ok); }
-  .badge.accent { color: var(--accent); border-color: var(--accent); }
-  .badge.warn { color: var(--warn); border-color: var(--warn); }
-  .tune-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
-  details.sect { border-top: 1px solid var(--line); padding-top: 6px; }
-  details.sect > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
-  .prm { padding: 8px 0 8px 8px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
-  .prm.custom { border-left-color: var(--accent); }
-  .prm.changed { border-left-color: var(--warn); }
-  .prm-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-  .prm-name { font-weight: 600; }
-  .prm-ctl { display: grid; grid-template-columns: minmax(0, 1fr) 84px 26px; gap: 8px; align-items: center; margin-top: 4px; }
-  .prm-ctl.simple { grid-template-columns: minmax(0, 1fr) 26px; }
-  .prm-ctl input[type=number], .prm-ctl select { width: 100%; font: inherit; color: var(--text); background: #232a33; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; text-align: right; }
-  .prm-ctl select { text-align: left; }
-  .prm-ctl .reset { padding: 0; min-height: 0; height: 26px; line-height: 1; border-radius: 6px; }
-  .prm-help { color: var(--muted); font-size: 12px; margin-top: 3px; }
-  .prm-tip { color: #a7c1e8; font-size: 12px; margin-top: 2px; display: none; }
-  .learn .prm-tip { display: block; }
-  .prm-state { font-size: 11px; margin-top: 2px; }
-  .prm-state.ok { color: var(--ok); } .prm-state.warn { color: var(--warn); } .prm-state.bad { color: var(--bad); }
-  .quick { display: grid; grid-template-columns: 96px minmax(0, 1fr) 60px; gap: 8px; align-items: center; }
-  .quick b { text-align: right; font-variant-numeric: tabular-nums; }
-  /* ---------- Phone / narrow layout ---------- */
-  /* Phone: portrait, and landscape (a phone turned sideways is ~900-960 px wide but only ~400 px tall). */
-  @media (max-width: 900px), (max-height: 520px) and (max-width: 1100px) {
-    main, main.ctrl-left { grid-template-columns: 1fr; gap: 12px; padding: 10px; }
-    body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
-
-    /* Compact header: status chips on one line, section links scroll sideways. */
-    header { padding: 8px 10px; gap: 6px 8px; }
-    header h1 { font-size: 15px; margin-right: 2px; }
-    .chip { font-size: 11px; padding: 2px 8px; }
-    nav.jump { order: 10; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-               margin: 0 -10px; padding: 0 10px; width: calc(100% + 20px); }
-    nav.jump::-webkit-scrollbar { display: none; }
-    nav.jump a { white-space: nowrap; padding: 6px 12px; }
-    main h2[id] { scroll-margin-top: calc(var(--hdr-h, 90px) + 10px); }
-
-    /* Bigger touch targets; 16px inputs stop iOS from zooming in on focus. */
-    button { min-height: 40px; }
-    .seg button { min-height: 36px; padding: 6px 12px; }
-    input[type=text], select, .sliders input[type=number] { font-size: 16px; min-height: 40px; }
-    input[type=checkbox], input[type=radio] { width: 20px; height: 20px; }
-    label.row, .row > label { min-height: 36px; }
-    input[type=range] { height: 32px; }
-    .grid { grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); }
-    .sliders { grid-template-columns: 78px minmax(0, 1fr) 68px; gap: 8px; }
-    .obs .sliders { grid-template-columns: 96px minmax(0, 1fr) 68px; }
-    .panel { padding: 12px; }
-
-    /* Control panel becomes a bottom sheet above the dock. */
-    main > aside, main.ctrl-left > aside {
-      position: fixed; left: 0; right: 0; top: auto; order: 0; z-index: 20;
-      bottom: calc(68px + env(safe-area-inset-bottom));
-      max-height: min(56vh, calc(100vh - var(--hdr-h, 90px) - 90px));
-      overflow-y: auto; margin: 0; padding: 0 10px 12px;
-      background: var(--bg); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0;
-      box-shadow: 0 -10px 30px rgba(0,0,0,.55);
-      transform: translateY(calc(100% + 80px)); visibility: hidden;
-      transition: transform .22s ease, visibility 0s linear .22s;
-    }
-    main > aside.open { transform: none; visibility: visible; transition: transform .22s ease; }
-    .side-bar { position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 10px 0 8px; margin: 0; }
-    .side-bar::before { content: ""; position: absolute; left: 50%; top: 4px; width: 40px; height: 4px;
-                        margin-left: -20px; border-radius: 2px; background: var(--line); }
-    .side-bar .hint { font-size: 14px; color: var(--text); font-weight: 600; }
-    #btn-side, aside > #btn-estop { display: none; }
-    #btn-sheet-close { display: inline-block; min-height: 34px; }
-    aside .stack > * + *, main > aside > * + * { margin-top: 10px; }
-    #pad { max-width: min(200px, 52vw); }
-
-    /* Always-visible bottom dock: E-STOP + open/close controls. */
-    #dock { display: flex; gap: 8px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-            padding-left: calc(10px + env(safe-area-inset-left)); padding-right: calc(10px + env(safe-area-inset-right));
-            padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-            background: var(--panel); border-top: 1px solid var(--line); }
-    #dock button { min-height: 52px; border-radius: 12px; font-weight: 700; }
-    #dock-estop { flex: 1.4; color: #fff; background: var(--bad); border-color: var(--bad); font-size: 17px; }
-    #dock-ctrl { flex: 1; font-size: 15px; }
-    #dock-ctrl.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-  }
-  /* Landscape phone: little height. Header scrolls away, the sheet may use most of the screen, the dock is slim. */
-  @media (max-height: 520px) and (max-width: 1100px) {
-    header { position: static; }
-    body { padding-bottom: calc(60px + env(safe-area-inset-bottom)); }
-    #dock { padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
-    #dock button { min-height: 44px; }
-    main > aside, main.ctrl-left > aside {
-      bottom: calc(58px + env(safe-area-inset-bottom)); max-height: calc(100vh - 70px);
-      max-height: calc(100dvh - 70px); left: env(safe-area-inset-left); right: env(safe-area-inset-right); }
-    #pad { max-width: min(180px, 40vh); }
-    .cloud-wrap, .mapx .view.map { max-height: 78vh; }
-    .view, .obs .view.map { max-height: 78vh; }
-  }
-  @media (hover: none) { button:hover { border-color: var(--line); } button.on:hover { border-color: var(--accent); } }
-</style>
+<script src="/static/i18n_en.js"></script>
+<script src="/static/i18n_pre.js"></script>
+<script src="/ui/ui_en.js"></script>
+<script src="/ui/i18n.js"></script>
+<link rel="stylesheet" href="/ui/theme.css">
+<link rel="stylesheet" href="/ui/ui.css">
+<link rel="stylesheet" href="/static/qcar2.css">
 </head>
-<body>
+<body data-page="drive">
 <header>
   <h1>QCar2</h1>
-  <nav class="jump">
-    <a href="#sec-surround">รอบคัน</a>
-    <a href="#sec-map" id="jump-map">แผนที่ / นำทาง</a>
-    <a href="#sec-obs">สิ่งกีดขวาง</a>
-    <a href="#sec-person">ติดตามคน</a>
-    <a href="#sec-cams">กล้อง</a>
+  <nav class="jump" id="page-tabs">
+    <button class="ptab on" data-page="drive">ขับ / รอบคัน</button>
+    <button class="ptab" data-page="map">แผนที่ / นำทาง</button>
+    <button class="ptab" data-page="auto">อัตโนมัติ</button>
+    <button class="ptab" data-page="cams">กล้อง</button>
+    <button class="ptab" data-page="learn">เรียนรู้ (AI)</button>
+    <button class="ptab" data-page="sys">ระบบ</button>
+    <button id="win-reset" title="คืนขนาดหน้าต่างทั้งหมดในหน้านี้">↺ จัดหน้าต่าง</button>
   </nav>
   <span id="chip-conn" class="chip">กำลังเชื่อมต่อ…</span>
   <span id="chip-ctrl" class="chip">ไม่มีผู้ควบคุม</span>
@@ -289,14 +37,20 @@
 
 <main>
   <section>
-    <h2 id="sec-surround">มุมมองรอบคัน</h2>
-    <div class="surround" id="surround-box">
+    <h2 id="sec-surround" data-pg="drive">มุมมองรอบคัน</h2>
+    <div class="surround" id="surround-box" data-pg="drive">
       <div class="cam">
         <div class="cam-head">
           <div><span>Bird's-eye view</span><small>กล้อง CSI 4 ตัว</small></div>
+          <button id="btn-calib" title="ปรับตำแหน่งกล้องทั้ง 4 ตัว">ปรับกล้อง</button>
           <button id="bev-toggle">เปิด</button>
         </div>
         <div class="view bev" id="bev-view"><span>ปิดอยู่</span></div>
+        <div class="vmodel" id="vmodel">
+          <canvas id="vmodel-canvas"></canvas>
+          <div class="vmodel-sel" id="vmodel-sel" hidden></div>
+          <div class="vmodel-help">ตำแหน่งกล้อง 4 ตัว · ลาก = หมุน · คลิกขวา/Shift+ลาก = เลื่อน · ล้อเมาส์/บีบนิ้ว = ซูม · คลิกกล้อง = ดูค่าและพื้นที่ในภาพ · ดับเบิลคลิก = มุมเดิม</div>
+        </div>
       </div>
       <div class="cam">
         <div class="cam-head">
@@ -308,53 +62,81 @@
             <button data-side="right">ขวา</button>
           </div>
           <small id="side-label"></small>
+          <button id="guide-toggle" class="on" title="เส้นแสดงทางที่รถจะวิ่งตามมุมเลี้ยวตอนนี้ (กล้องหน้า/หลัง)">เส้นนำทาง</button>
+        </div>
+        <div class="side-stack" id="side-stack"><div class="side-inner" id="side-inner">
+        <div class="dash dash-top" id="dash-top">
+          <div class="d-speed"><b id="d-speed">–</b><span>m/s<small id="d-speed-src"></small></span><i id="d-gear" class="d-gear">N</i></div>
+          <div class="d-steer">
+            <svg viewBox="0 0 64 36"><path d="M6 32 A26 26 0 0 1 58 32" class="d-arc"/><path d="M32 32 L32 9" id="d-needle" class="d-needle"/><circle cx="32" cy="32" r="3"/></svg>
+            <span id="d-steer">–</span>
+          </div>
+          <div class="d-info"><b id="d-mode">–</b><small id="d-cmd">–</small></div>
+          <div class="d-batt"><b id="d-batt">–</b><small>แบตเตอรี่</small></div>
         </div>
         <div class="view" id="side-view"><span>ปิดอยู่</span></div>
+        <canvas class="guide" id="guide"></canvas>
+        <div class="dash dash-bot" id="dash-bot">
+          <svg class="d-prox" viewBox="0 0 120 92">
+            <rect x="48" y="20" width="24" height="52" rx="5" class="d-car"/><path d="M60 24 l-5 7 h10z" fill="#3b8cff"/>
+            <rect id="pb-front" x="42" y="6" width="36" height="7" rx="3"/><rect id="pb-back" x="42" y="79" width="36" height="7" rx="3"/>
+            <rect id="pb-left" x="33" y="22" width="7" height="48" rx="3"/><rect id="pb-right" x="80" y="22" width="7" height="48" rx="3"/>
+          </svg>
+          <div class="d-prox-list">
+            <span>หน้า <b id="p-front">–</b></span><span>หลัง <b id="p-back">–</b></span>
+            <span>ซ้าย <b id="p-left">–</b></span><span>ขวา <b id="p-right">–</b></span>
+            <small>ระยะจากขอบรถถึงสิ่งที่ lidar เห็นใกล้สุด · แดง &lt; 0.3 m · เหลือง &lt; 0.6 m</small>
+          </div>
+        </div>
+        </div></div>
       </div>
     </div>
 
-    <details class="calib panel" id="calib">
-      <summary>ปรับตำแหน่งกล้อง (calibration) พร้อมภาพ preview</summary>
-      <div class="calib-layout">
-        <div class="calib-preview">
-          <div class="view bev" id="calib-bev"><span>ปิดอยู่</span></div>
-          <div class="view" id="calib-raw"><span>ปิดอยู่</span></div>
-          <p class="hint" style="margin:0">กรอบสีเหลือง = พื้นที่ที่กล้องที่เลือกแสดงอยู่ (ส่วนอื่นจะมืดลง) ·
-            ภาพล่าง = ภาพดิบจากกล้องที่เลือก · ระหว่างลากแถบเลื่อนภาพจะหยาบลงชั่วคราวเพื่อให้ตอบสนองเร็ว</p>
-        </div>
-        <div>
-          <p class="hint" style="margin-top:0">วางรถบนพื้นเรียบที่มีเส้นตรง (เช่น เทปบนพื้น หรือกระเบื้อง) แล้วปรับจนเส้นต่อกันพอดีตรงรอยต่อระหว่างกล้อง ·
-            ตำแหน่ง x = ไปด้านหน้า, y = ไปทางซ้าย, z = ความสูงจากพื้น (เมตร, วัดจากกลางรถ) · pitch บวก = ก้มลง ·
-            พิมพ์ตัวเลขในช่องขวาเพื่อปรับละเอียด</p>
-          <div class="seg" id="calib-cam">
-            <button data-side="front">กล้องหน้า</button><button data-side="back">กล้องหลัง</button>
-            <button data-side="left">กล้องซ้าย</button><button data-side="right">กล้องขวา</button>
-          </div>
-          <div class="sliders" id="calib-cam-sliders"></div>
-          <h2 style="margin-top:14px">ทั้งภาพ</h2>
-          <div class="sliders" id="calib-global-sliders"></div>
-          <label class="row hint" style="margin-top:8px"><input type="checkbox" id="calib-grid"> แสดงเส้นระยะ 0.5 m</label>
-          <div class="row" style="margin-top:12px">
-            <button id="calib-save">บันทึก</button>
-            <button id="calib-reset">ค่าเริ่มต้น</button>
-          </div>
-          <p class="hint" id="calib-status"></p>
-        </div>
+
+    <details class="calib panel" id="calib" data-pg="drive">
+      <summary>ปรับตำแหน่งกล้อง</summary>
+      <div class="calib-head">
+        <h2>ปรับตำแหน่งกล้อง (calibration)</h2>
+        <button id="calib-close">ปิด</button>
       </div>
+      <p class="hint" style="margin-top:0">วางรถบนพื้นเรียบที่มีเส้นตรง (เช่น เทปบนพื้น หรือกระเบื้อง) แล้วปรับจนเส้นต่อกันพอดีตรงรอยต่อระหว่างกล้อง ·
+        กรอบเหลืองใน Bird's-eye view = พื้นที่ของกล้องที่เลือก · หน้าต่างกล้องข้าง ๆ แสดงภาพดิบของกล้องนั้น ·
+        คลิกกล้องในโมเดล 3D เพื่อเลือกได้ · x = ไปด้านหน้า, y = ไปทางซ้าย, z = ความสูงจากพื้น (เมตร, วัดจากกลางรถ) ·
+        pitch บวก = ก้มลง · พิมพ์ตัวเลขในช่องขวาเพื่อปรับละเอียด</p>
+      <div class="seg" id="calib-cam">
+    <button data-side="front">กล้องหน้า</button><button data-side="back">กล้องหลัง</button>
+    <button data-side="left">กล้องซ้าย</button><button data-side="right">กล้องขวา</button>
+  </div>
+  <div class="sliders" id="calib-cam-sliders"></div>
+  <h2 style="margin-top:14px">ทั้งภาพ</h2>
+  <div class="sliders" id="calib-global-sliders"></div>
+  <label class="row hint" style="margin-top:8px"><input type="checkbox" id="calib-grid"> แสดงเส้นระยะ 0.5 m</label>
+  <div class="row" style="margin-top:12px">
+    <button id="calib-save">บันทึก</button>
+    <button id="calib-reset">ค่าเริ่มต้น</button>
+  </div>
+  <p class="hint" id="calib-status"></p>
     </details>
 
-    <h2 id="sec-map">แผนที่และนำทาง</h2>
-    <div class="mapx">
+    <h2 id="sec-map" data-pg="map">แผนที่และนำทาง</h2>
+    <div class="mapx" data-pg="map">
       <div class="cam">
         <div class="cam-head">
-          <div><span>แผนที่</span><small>ฟ้า = รถ · แดง = lidar · เขียว = เส้นทาง · ส้ม = เป้าหมาย · ตาราง 1 m</small></div>
+          <div><span>แผนที่</span><small>ฟ้า = รถ · แดง = lidar · เขียว = เส้นทาง · ส้ม = เป้าหมาย · ตาราง 1 m · ลากซ้าย = หมุน · Shift/ปุ่มกลาง = เลื่อน · ล้อ/ลากขวา = ซูม</small></div>
           <button id="map-toggle">เปิด</button>
         </div>
         <div class="view map" id="map-view"><span>ปิดอยู่</span></div>
         <div class="map-bar">
           <div class="seg" id="map-tools">
-            <button data-tool="goal" class="on" title="รับสิทธิ์ควบคุมก่อน แล้วคลิกบนแผนที่ (ลากเพื่อกำหนดทิศหน้ารถ)">🎯 ตั้งเป้าหมาย</button>
-            <button data-tool="pose" title="คลิกตรงที่รถอยู่จริง ลากเพื่อบอกทิศหน้ารถ">📍 ตั้งตำแหน่งรถ</button>
+            <button data-tool="view" class="on" title="เหมือน RViz: ลากซ้าย = หมุน · ลากปุ่มกลาง/Shift+ลาก = เลื่อน · ลากขวา/ล้อเมาส์ = ซูม · ดับเบิลคลิก = พอดีจอ · จอสัมผัส: นิ้วเดียว = เลื่อน, สองนิ้ว = ซูม/หมุน">มุมมอง</button>
+            <button data-tool="goal" title="รับสิทธิ์ควบคุมก่อน แล้วคลิกบนแผนที่ (ลากเพื่อกำหนดทิศหน้ารถ)">ตั้งเป้าหมาย</button>
+            <button data-tool="pose" title="คลิกตรงที่รถอยู่จริง ลากเพื่อบอกทิศหน้ารถ">ตั้งตำแหน่งรถ</button>
+          </div>
+          <div class="seg map-zoom">
+            <button data-z="out" title="ซูมออก">−</button><span id="map-zoom-label" title="ความกว้างที่เห็น">–</span>
+            <button data-z="in" title="ซูมเข้า">+</button><button data-z="fit" title="เห็นทั้งแผนที่ (หมุนกลับทิศเดิม)">พอดีจอ</button>
+            <button data-z="north" title="หมุนกลับให้แกน x ของแผนที่ชี้ไปทางขวา">ทิศเดิม</button>
+            <button data-z="follow" id="map-follow" title="ให้มุมมองเลื่อนตามรถ">ตามรถ</button>
           </div>
           <span class="hint" id="map-stats">–</span>
         </div>
@@ -390,7 +172,7 @@
           <ol class="steps" id="build-steps"></ol>
           <div class="row">
             <input type="text" id="map-name" placeholder="ชื่อแผนที่ (เว้นว่าง = ตามวันเวลา)" maxlength="40">
-            <button id="map-save" style="flex:0 0 auto">💾 บันทึกแผนที่</button>
+            <button id="map-save" style="flex:0 0 auto">บันทึกแผนที่</button>
           </div>
         </div>
 
@@ -449,13 +231,15 @@
       <div class="cam cloud3d" id="cloud-card">
         <div class="cam-head">
           <div><span>มุมมอง 3D จากกล้อง (เหมือน RViz)</span>
-            <small>ลากซ้าย = หมุน · ลากขวา/Shift = เลื่อน · ล้อเมาส์/บีบนิ้ว = ซูม · ดับเบิลคลิก = รีเซ็ตมุม · ใช้ได้ตอนทำแผนที่แบบ V-SLAM</small></div>
+            <small>ผนังจากแผนที่ 2D · แผนที่ 3D จาก RTAB-Map (V-SLAM) · ภาพสดจากกล้อง · ลากซ้าย = หมุน · ลากขวา/Shift = เลื่อน · ล้อเมาส์/บีบนิ้ว = ซูม · ดับเบิลคลิก = รีเซ็ตมุม</small></div>
           <button id="cloud-toggle">เปิด</button>
         </div>
         <div class="cloud-wrap" id="cloud-wrap"><canvas id="cloud-canvas"></canvas>
           <div class="cloud-msg" id="cloud-msg">ปิดอยู่</div></div>
         <div class="map-bar cloud-bar">
-          <label class="row hint"><input type="checkbox" id="cloud-acc" checked> สะสมเป็นแผนที่ 3D</label>
+          <label class="row hint" title="ผนังสูงขึ้นจากแผนที่ 2D (ใช้ได้ทั้ง Lidar และ V-SLAM)"><input type="checkbox" id="cloud-walls" checked> ผนังจากแผนที่ 2D</label>
+          <label class="row hint" title="จุดสีจากทุกภาพที่ RTAB-Map เก็บไว้ ปรับตามการปิดลูป"><input type="checkbox" id="cloud-map3d" checked> แผนที่ 3D (V-SLAM)</label>
+          <label class="row hint" title="ภาพสดจากกล้องตอนนี้ · ติ๊กเพื่อสะสมไว้ในเบราว์เซอร์ (ไม่แก้ตามการปิดลูป)"><input type="checkbox" id="cloud-acc"> สะสมภาพสด</label>
           <label class="row hint"><input type="checkbox" id="cloud-follow" checked> กล้องตามรถ</label>
           <div class="seg" id="cloud-color"><button data-c="0" class="on">สีจริง</button><button data-c="1">ตามความสูง</button></div>
           <div class="seg" id="cloud-views"><button data-v="iso">เฉียง</button><button data-v="top">มองลง</button><button data-v="chase">ตามหลังรถ</button></div>
@@ -468,8 +252,10 @@
     </div>
 
 
-    <h2 id="sec-obs">สิ่งกีดขวาง (RealSense depth)</h2>
-    <div class="obs">
+    <div class="autox" id="auto-box" data-pg="auto">
+    <div class="auto-pane">
+    <h2 id="sec-obs" data-pg="auto">สิ่งกีดขวาง (RealSense depth)</h2>
+    <div class="obs" data-pg="auto">
       <div class="cam">
         <div class="cam-head">
           <div><span>มุมบน</span><small>จุดสิ่งกีดขวาง + เส้นทางที่รถจะวิ่ง</small></div>
@@ -491,9 +277,11 @@
         <p class="hint" id="obs-status"></p>
       </div>
     </div>
+    </div>
+    <div class="auto-pane">
 
-    <h2 id="sec-person">ติดตามคน (RealSense RGB + depth)</h2>
-    <div class="obs">
+    <h2 id="sec-person" data-pg="auto">ติดตามคน (RealSense RGB + depth)</h2>
+    <div class="obs" data-pg="auto">
       <div class="cam">
         <div class="cam-head">
           <div><span>คนที่ตรวจพบ</span><small>กรอบเขียว = เป้าหมายที่รถจะตาม · ตัวเลข = ระยะจากกล้อง</small></div>
@@ -514,9 +302,137 @@
         <p class="hint" id="person-status"></p>
       </div>
     </div>
+    </div>
+    </div>
 
-    <h2 id="sec-cams">กล้อง</h2>
-    <div id="grid" class="grid"></div>
+    <h2 id="sec-cams" data-pg="cams">กล้อง</h2>
+    <div class="split-tools" id="split-tools" data-pg="cams">
+      <span class="hint">แบ่งจอ</span>
+      <div class="seg" id="split-n">
+        <button data-n="1">1</button><button data-n="2">2</button><button data-n="3">3</button>
+        <button data-n="4">4</button><button data-n="6">6</button><button data-n="9">9</button>
+      </div>
+      <button id="split-even" title="ทำให้ทุกช่องเท่ากัน">ช่องเท่ากัน</button>
+      <span class="hint">ภาพ</span>
+      <div class="seg" id="split-fit">
+        <button data-fit="cover" title="ภาพเต็มช่องทุกช่อง ตัดขอบที่เกินออก">เต็มช่อง</button>
+        <button data-fit="contain" title="เห็นทั้งภาพ มีแถบดำถ้าสัดส่วนไม่ตรงกับช่อง">ทั้งภาพ</button>
+        <button data-fit="fill" title="ยืดภาพให้เต็มช่องพอดี (ภาพจะผิดสัดส่วน)">ยืด</button>
+      </div>
+      <span class="hint">เลือกกล้องของแต่ละช่องจากหัวช่อง · ลากเส้นแบ่งเพื่อปรับขนาด · ดับเบิลคลิกหัวช่อง = เต็มพื้นที่</span>
+    </div>
+    <div id="grid" class="splitview" data-pg="cams"></div>
+    <h2 id="sec-learn" data-pg="learn">เรียนรู้: ตรวจจับวัตถุ (RealSense)</h2>
+    <div class="learnx" id="learn-box" data-pg="learn">
+      <div class="learn-main">
+        <div class="cam learn-lab">
+          <div class="cam-head">
+            <div class="lcls-bar" id="learn-classes"></div>
+          </div>
+          <div class="learn-mode-row">
+            <div class="seg" id="learn-tool">
+              <button data-t="box" title="ตีกรอบสี่เหลี่ยม (B)">กรอบ (B)</button>
+              <button data-t="poly" title="คลิกทีละจุดรอบวัตถุ (P)">Polygon (P)</button>
+              <button data-t="brush" title="ระบายทับวัตถุ (G)">พู่กัน (G)</button>
+              <button data-t="wand" title="คลิกเลือกบริเวณสีใกล้เคียง (W)">ไม้กายสิทธิ์ (W)</button>
+            </div>
+            <span id="learn-brush-opts" hidden>
+              <label class="hint" id="learn-brush-size">ขนาด <input id="learn-brush" type="range" min="4" max="150" step="2"> <b id="learn-brush-v"></b></label>
+              <label class="hint" id="learn-wand-tol" title="ยิ่งมาก ยิ่งรวมสีที่ต่างกันมากขึ้น">ความต่างสี <input id="learn-tol" type="range" min="2" max="80" step="1"> <b id="learn-tol-v"></b></label>
+              <label class="hint"><input type="checkbox" id="learn-erase"> ลบ (Shift)</label>
+              <button id="learn-paint-done" title="Enter">สร้างรูปร่าง (Enter)</button>
+              <button id="learn-paint-clear" title="Esc">ล้าง (Esc)</button>
+            </span>
+            <span class="hint" id="learn-tool-hint"></span>
+          </div>
+          <canvas id="learn-canvas"></canvas>
+          <div class="learn-tools">
+            <button id="learn-prev" title="ภาพก่อน (A / ←)">‹</button>
+            <button id="learn-next" title="ภาพถัดไป (D / →)">›</button>
+            <button id="learn-save" title="บันทึกแล้วไปภาพถัดไป (S / Enter)">บันทึก (S)</button>
+            <button id="learn-empty" title="ภาพนี้ไม่มีวัตถุ: บันทึกว่าง แล้วไปภาพถัดไป (N)">ไม่มีวัตถุ (N)</button>
+            <button id="learn-suggest" title="ให้โมเดลช่วยตีกรอบ (Q)">ช่วยตีกรอบ (Q)</button>
+            <label class="hint learn-only" title="ช่วยตีกรอบเฉพาะ class ที่เลือกอยู่"><input type="checkbox" id="learn-only" checked> เฉพาะ class ที่เลือก</label>
+            <button id="learn-helper" title="train ด่วนจากภาพที่ label แล้ว ให้ปุ่มช่วยตีกรอบรู้จัก class ของเรา (ประมาณ 1-3 นาที)">สอนตัวช่วย</button>
+            <button id="learn-copy" title="คัดลอกกรอบจากภาพก่อนหน้าที่ label แล้ว (R) เหมาะกับภาพต่อเนื่อง">คัดลอกจากภาพก่อน (R)</button>
+            <button id="learn-delbox" title="ลบกรอบที่เลือก (Delete) · คลิกขวาที่กรอบก็ลบได้">ลบกรอบ</button>
+            <button id="learn-undo" title="ย้อนกลับ (Ctrl+Z)">ย้อน</button>
+            <button id="learn-delimg">ลบภาพ</button>
+            <span class="hint" id="learn-lab-state"></span>
+          </div>
+          <div class="learn-other" id="learn-other"></div>
+          <div class="learn-helper-row">
+            <span class="hint">ตัวช่วย</span>
+            <select id="learn-helper-model" title="โมเดลที่ใช้ตอนกดช่วยตีกรอบ / label อัตโนมัติ"></select>
+            <span class="hint" id="learn-helper-now"></span>
+            <button id="learn-autolabel" title="ให้ตัวช่วยตีกรอบทุกภาพที่ยังไม่ label แล้วตรวจทีละภาพในตัวกรอง รอตรวจ">label อัตโนมัติทั้งชุด</button>
+            <label class="hint">มั่นใจ ≥ <select id="learn-auto-conf"><option value="0.25">25%</option><option value="0.4">40%</option><option value="0.6" selected>60%</option><option value="0.8">80%</option></select></label>
+            <button id="learn-clear-pending" title="ทิ้งกรอบรอตรวจทั้งหมด">ทิ้งรอตรวจ</button>
+            <span class="hint" id="learn-auto-res"></span>
+          </div>
+          <p class="hint learn-keys">R = คัดลอกกรอบจากภาพก่อน · ลากบนภาพ = ตีกรอบ class ที่เลือก (ลากทับกรอบอื่นได้) · คลิกกรอบ = เลือก · ลากกรอบที่เลือก/มุม = ย้าย/ปรับขนาด · 1-9 = เปลี่ยน class · C = ถ่ายภาพ · คลิกขวา = ลบกรอบ</p>
+        </div>
+        <div class="cam learn-gal">
+          <div class="cam-head">
+            <div><span>ภาพในชุดข้อมูล</span><small id="learn-gal-n"></small></div>
+            <div class="seg" id="learn-filter"><button data-f="all">ทั้งหมด</button><button data-f="todo">ยังไม่ label</button><button data-f="review">รอตรวจ</button><button data-f="done">label แล้ว</button><select id="learn-camf" title="แสดงเฉพาะภาพจากกล้อง"></select></div>
+          </div>
+          <div class="learn-gallery" id="learn-gallery"></div>
+        </div>
+      </div>
+      <div class="learn-side">
+        <div class="cam learn-cam">
+          <div class="cam-head">
+            <div><span>ภาพสด</span> <select id="learn-view" title="กล้องที่แสดงที่นี่ และที่ใช้ตรวจจับสด"></select><small id="learn-cam-state"></small></div>
+            <div class="seg" id="learn-live-seg"><button data-m="cam">กล้อง</button><button data-m="detect">ผลตรวจจับ</button><button data-m="off">ปิด</button></div>
+          </div>
+          <div class="view learn-live" id="learn-live"><span>ปิดอยู่</span></div>
+          <div class="learn-cams" id="learn-cams"></div>
+          <div class="learn-cap">
+            <button id="learn-shot" title="C">ถ่ายภาพ (C)</button>
+            <button id="learn-auto">ถ่ายอัตโนมัติ</button>
+            <label class="hint">ทุก <input id="learn-interval" type="number" min="0.5" max="60" step="0.5" value="2"> วิ</label>
+          </div>
+          <p class="hint learn-pad" id="learn-auto-state"></p>
+          <p class="hint learn-pad">เลือกหลายกล้อง = ถ่ายทุกกล้องพร้อมกันในครั้งเดียว · ถ่ายอัตโนมัติจะข้ามภาพที่เบลอหรือแทบไม่ต่างจากภาพก่อน (แยกตามกล้อง) · ขับรถไปรอบ ๆ วัตถุ หลายมุม หลายระยะ หลายแสง</p>
+        </div>
+        <div class="learn-panels">
+        <div class="panel stack">
+          <h3>ชุดข้อมูล</h3>
+          <div class="row"><select id="learn-ds"></select><button id="learn-ds-new">ใหม่</button><button id="learn-ds-del">ลบ</button></div>
+          <p class="hint" id="learn-counts"></p>
+          <div id="learn-cls-list"></div>
+        </div>
+        <div class="panel stack">
+          <h3>Train</h3>
+          <div class="learn-form">
+            <label>โมเดล<select id="learn-size"><option value="s" selected>YOLOv8s (แนะนำ)</option><option value="n">YOLOv8n (เร็ว แม่นน้อยกว่า)</option><option value="m">YOLOv8m (แม่น ช้า)</option></select></label>
+            <label title="กรอบ = รู้ตำแหน่งเป็นสี่เหลี่ยม · รูปร่าง = รู้ขอบวัตถุ (ใช้ polygon/พู่กัน/ไม้กายสิทธิ์ ภาพที่มีแต่กรอบจะใช้สี่เหลี่ยมแทน)">ประเภท<select id="learn-task"><option value="detect">ตรวจจับกรอบ (detect)</option><option value="segment">แบ่งรูปร่าง (segment)</option></select></label>
+            <label>เริ่มจาก<select id="learn-from"></select></label>
+            <label>รอบ (epochs)<input id="learn-epochs" type="number" min="1" max="300" value="50"></label>
+            <label>ขนาดภาพ<select id="learn-imgsz"><option>416</option><option selected>640</option><option>800</option></select></label>
+            <label>batch<input id="learn-batch" type="number" min="1" max="64" value="16"></label>
+            <label title="ถ้าผลบนภาพตรวจไม่ดีขึ้นติดกันกี่รอบให้หยุด (0 = train ครบทุกรอบ)">หยุดเองถ้าไม่ดีขึ้น (รอบ)<input id="learn-patience" type="number" min="0" max="300" value="30"></label>
+          </div>
+          <button id="learn-train" style="width:100%">เริ่ม train</button>
+          <p class="hint bad" id="learn-train-warn"></p>
+          <div id="learn-job" hidden></div>
+          <canvas id="learn-chart" class="learn-chart" hidden></canvas>
+          <p class="hint">train บนรถ (GPU ของ Jetson) ข้อมูลไม่ออกจากเครื่อง · ภาพ 20% ถูกกันไว้ตรวจผล (V) · ถ้าเริ่มโหมดอัตโนมัติระหว่าง train การ train จะหยุดเอง</p>
+        </div>
+        <div class="panel stack">
+          <h3>โมเดลที่ train แล้ว</h3>
+          <p class="hint" id="learn-active"></p>
+          <div class="learn-conf"><span class="hint">ความมั่นใจขั้นต่ำ</span><input id="learn-conf" type="range" min="0.05" max="0.95" step="0.05" value="0.4"><span id="learn-conf-v">40%</span></div>
+          <div id="learn-objs" class="learn-objs"></div>
+          <div id="learn-runs"></div>
+        </div>
+        </div>
+      </div>
+      <div class="learn-toast" id="learn-toast"></div>
+    </div>
+    <!-- Tablet/computer: the system panels are moved here from the side panel on the "ระบบ" page -->
+    <div id="sys-host" class="sys-host" data-pg="sys"></div>
   </section>
 
   <aside class="stack" id="ctrl-aside">
@@ -527,7 +443,7 @@
     </div>
     <button id="btn-estop" class="estop">หยุดฉุกเฉิน (Space)</button>
 
-    <div class="panel stack">
+    <div class="panel stack" data-pg="drive">
       <h2>ควบคุมรถ</h2>
       <div class="row">
         <button id="btn-take">รับสิทธิ์ควบคุม</button>
@@ -548,7 +464,7 @@
         ปล่อยมือแล้วรถหยุด · ถ้าการเชื่อมต่อหลุด รถจะหยุดเองภายใน <span id="timeout-label">0.5</span> วินาที</p>
     </div>
 
-    <div class="panel stack">
+    <div class="panel stack" data-pg="auto">
       <h2>หลบสิ่งกีดขวาง</h2>
       <label class="row"><input type="checkbox" id="obs-enabled"> เบรกอัตโนมัติเมื่อขับเดินหน้า</label>
       <button id="btn-auto" disabled style="width:100%">เริ่มโหมดขับหลบอัตโนมัติ</button>
@@ -556,14 +472,14 @@
         ขยับ joystick หรือกดปุ่มทิศทางเพื่อขับเอง (ออกจากโหมดอัตโนมัติทันที) · ไม่มีการตรวจด้านหลัง ระวังตอนถอย</p>
     </div>
 
-    <div class="panel stack">
+    <div class="panel stack" data-pg="auto">
       <h2>ติดตามคน</h2>
       <button id="btn-follow" disabled style="width:100%">เริ่มโหมดติดตามคน</button>
       <p class="hint">ให้คนที่จะให้ตามยืนตรงหน้ารถ ห่าง 1–3 m แล้วกดเริ่ม · รถจะตามโดยเว้นระยะตามที่ตั้งไว้ ·
         ต้องรับสิทธิ์ควบคุมก่อนและเปิดหน้านี้ค้างไว้ · ขยับ joystick เพื่อออกจากโหมดทันที</p>
     </div>
 
-    <div class="panel stack">
+    <div class="panel stack" data-pg="map">
       <h2>นำทาง (Nav2)</h2>
       <dl class="kv">
         <dt>สถานะ</dt><dd id="nav-state">–</dd>
@@ -574,7 +490,7 @@
       <p class="hint">เปิดแผนที่แล้วคลิกเพื่อตั้งเป้าหมาย · ต้องรับสิทธิ์ควบคุมก่อนและเปิดหน้านี้ค้างไว้</p>
     </div>
 
-    <div class="panel stack">
+    <div class="panel stack" data-pg="sys">
       <h2>ระบบ (Wi-Fi / MATLAB / Eco)</h2>
       <dl class="kv">
         <dt>Wi-Fi</dt><dd id="sys-wifi">–</dd>
@@ -592,7 +508,7 @@
         (hotspot: QCar2-Demo → http://10.42.0.1:8080)</p>
     </div>
 
-    <div class="panel stack">
+    <div class="panel stack" data-pg="sys">
       <h2>ไฟ RGB บนรถ (LED strip)</h2>
       <div class="row" style="align-items:center">
         <input type="color" id="led-color" value="#ff0000" style="width:56px;height:36px;padding:0;border:none;background:none">
@@ -603,11 +519,21 @@
         <input type="range" id="led-bright" min="0" max="100" step="5" value="100">
         <b id="led-bright-val">100%</b>
       </div>
-      <p class="hint" id="led-status">ไฟแถบรอบตัวรถ 33 ดวง สีเดียวกันทั้งแถบ · ไฟหน้า/ไฟเบรก/ไฟเลี้ยวเป็นไฟเปิด-ปิด ไม่ใช่ RGB ·
-        จำค่าไว้ เปิดเครื่องใหม่ก็ได้สีเดิม</p>
+      <div class="seg led-fx" id="led-fx">
+        <button data-fx="none">สีเดียว</button><button data-fx="rainbow">รุ้งวิ่ง</button><button data-fx="cycle">รุ้งเปลี่ยนสี</button>
+        <button data-fx="chase">ไฟวิ่ง</button><button data-fx="breathe">หายใจ</button>
+      </div>
+      <div class="quick" id="led-speed-row">
+        <span>ความเร็ว</span>
+        <input type="range" id="led-speed" min="0.1" max="5" step="0.1" value="1">
+        <b id="led-speed-val">1.0×</b>
+      </div>
+      <canvas id="led-preview" class="led-preview" title="ตัวอย่างไฟ 33 ดวง (โดยประมาณ)"></canvas>
+      <p class="hint" id="led-status">ไฟแถบรอบตัวรถ 33 ดวง · รุ้งวิ่ง/รุ้งเปลี่ยนสีไม่ใช้สีที่เลือก · ไฟวิ่ง/หายใจใช้สีที่เลือก ·
+        ไฟหน้า/ไฟเบรก/ไฟเลี้ยวเป็นไฟเปิด-ปิด ไม่ใช่ RGB · จำค่าไว้ เปิดเครื่องใหม่ก็ได้แบบเดิม</p>
     </div>
 
-    <div class="panel">
+    <div class="panel" data-pg="sys">
       <h2>สถานะ</h2>
       <dl class="kv">
         <dt>คำสั่งเลี้ยว</dt><dd id="out-steer">–</dd>
@@ -622,123 +548,81 @@
 
 <div id="dock">
   <button id="dock-estop">หยุดฉุกเฉิน</button>
-  <button id="dock-ctrl" aria-controls="ctrl-aside" aria-expanded="false">🎮 ควบคุม ▲</button>
+  <button id="dock-ctrl" aria-controls="ctrl-aside" aria-expanded="false">ควบคุม ▲</button>
+  <!-- Phone only: one page at a time, switched from here -->
+  <button class="tab on" data-page="drive"><svg class="ic" viewBox="0 0 24 24"><path d="M5 16l1.5-5.5A2 2 0 0 1 8.4 9h7.2a2 2 0 0 1 1.9 1.5L19 16"/><rect x="3" y="16" width="18" height="4" rx="1.5"/><circle cx="7" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/></svg>ขับ</button>
+  <button class="tab" data-page="map"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>แผนที่</button>
+  <button class="tab" data-page="auto"><svg class="ic" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M9 16h6"/></svg>อัตโนมัติ</button>
+  <button class="tab" data-page="cams"><svg class="ic" viewBox="0 0 24 24"><path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="4"/></svg>กล้อง</button>
+  <button class="tab" data-page="learn"><svg class="ic" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>AI</button>
+  <button class="tab" data-page="sys"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>ระบบ</button>
 </div>
 
+<div id="page-hint"><span></span><i></i></div>
+<script src="/ui/core.js"></script>
 <script>
 (() => {
-  const $ = (id) => document.getElementById(id);
+  // Shared parts (shell, windows, drag bars, pages, camera streams, inputs): robot_web_ui core.js
+  const { $, nudge, maximize, winify, splitPair, junction, streamView, setChip } = RobotUI;
+  RobotUI.initShell();
 
-  // ---- Control panel: sticky offset + left/right placement (remembered per browser) ----
+  // ---- Drag bars of the QCar2 pages (robot_web_ui splitPair / junction) ----
   (() => {
-    const main = document.querySelector('main'), hdr = document.querySelector('header'), btn = $('btn-side');
-    const setHdr = () => document.documentElement.style.setProperty('--hdr-h', hdr.offsetHeight + 'px');
-    setHdr();
-    if (window.ResizeObserver) new ResizeObserver(setHdr).observe(hdr); else addEventListener('resize', setHdr);
-    const apply = (left) => {
-      main.classList.toggle('ctrl-left', left);
-      btn.textContent = left ? 'ย้ายไปขวา ⇆' : '⇆ ย้ายไปซ้าย';
-    };
-    let left = false;
-    try { left = localStorage.getItem('qcar2.ctrlSide') === 'left'; } catch (e) {}
-    apply(left);
-    btn.addEventListener('click', () => {
-      left = !left; apply(left);
-      try { localStorage.setItem('qcar2.ctrlSide', left ? 'left' : 'right'); } catch (e) {}
-      btn.blur();  // keep Space for E-STOP, not re-clicking this button
+    document.querySelectorAll('main > section :is(.surround, .mapx, .mapx-side, .obs) > :is(.cam, .panel)').forEach(winify);
+    const sur = $('surround-box'), [bev, side] = sur.children;
+    const surX = splitPair(sur, bev, side, 'x', 'surround', 0.4);
+    const bevY = splitPair(bev, $('bev-view'), $('vmodel'), 'y', 'bev-model', 0.62);
+    junction(sur, surX, bevY);
+    const mapx = document.querySelector('.mapx'), mapCard = mapx.children[0], mside = mapx.querySelector('.mapx-side');
+    const [mpanel, mcloud] = mside.children;
+    const mapX = splitPair(mapx, mapCard, mside, 'x', 'mapx', 0.5);
+    const sideY = splitPair(mside, mpanel, mcloud, 'y', 'mapx-side', 0.5);
+    junction(mapx, mapX, sideY);
+    document.querySelectorAll('main > section .obs').forEach((o, i) => {
+      const [a, b] = o.children;
+      splitPair(o, a, b, 'x', 'obs' + i, 0.42);
     });
-
-    // Phone: control panel is a bottom sheet toggled from the dock; E-STOP lives in the dock.
-    const aside = $('ctrl-aside'), dockCtrl = $('dock-ctrl');
-    const setSheet = (open) => {
-      aside.classList.toggle('open', open);
-      dockCtrl.classList.toggle('on', open);
-      dockCtrl.textContent = open ? '🎮 ซ่อน ▼' : '🎮 ควบคุม ▲';
-      dockCtrl.setAttribute('aria-expanded', String(open));
-    };
-    dockCtrl.addEventListener('click', () => { setSheet(!aside.classList.contains('open')); dockCtrl.blur(); });
-    $('btn-sheet-close').addEventListener('click', () => setSheet(false));
-    $('dock-estop').addEventListener('click', (e) => { $('btn-estop').click(); e.currentTarget.blur(); setSheet(true); });
+    const autox = $('auto-box');
+    splitPair(autox, autox.children[0], autox.children[1], 'y', 'auto-y', 0.5);
+    // Learn page: labeler | side column; labeler over gallery; live camera over the panels
+    const lx = $('learn-box'), lmain = lx.querySelector('.learn-main'), lside = lx.querySelector('.learn-side');
+    [lmain.children[0], lmain.children[1], lside.children[0]].forEach(winify);
+    const learnX = splitPair(lx, lmain, lside, 'x', 'learn-x', 0.7);
+    const learnY = splitPair(lmain, lmain.children[0], lmain.children[1], 'y', 'learn-main', 0.74);
+    const learnSideY = splitPair(lside, lside.children[0], lside.querySelector('.learn-panels'), 'y', 'learn-side', 0.4);
+    junction(lx, learnX, learnY);
+    junction(lx, learnX, learnSideY);
   })();
-  let ws = null, limits = { max_speed: 0.5, max_steer: 0.5, command_timeout: 0.5 };
+
+  // ---- Pages: one at a time (robot_web_ui initPages) ----
+  // Streams owned by a page are closed when leaving it (saves Wi-Fi/CPU) and the ones that were
+  // on are reopened on return (first visit: defaults). The split screen of the cameras page
+  // follows the page itself.
+  RobotUI.initPages({
+    home: 'drive', always: ['drive'],
+    streams: { drive: ['bev-toggle'], map: ['map-toggle', 'cloud-toggle'], auto: ['obs-toggle', 'person-toggle'] },
+    defaults: { drive: ['bev-toggle'], map: ['map-toggle'] },
+    deskHost: { sys: 'sys-host' },   // tablet/computer: the system panels get the page to themselves
+    onLeave: (old) => {
+      if (old === 'drive' && $('calib').open) { $('calib').open = false; $('calib').dispatchEvent(new Event('toggle')); }
+    },
+  });
+
+  let limits = { max_speed: 0.5, max_steer: 0.5, command_timeout: 0.5 };
   let sys = null;   // the 'system' part of the status (Wi-Fi, ROS, SLAM / Nav2 mode)
   let state = { control: 'none', estop: false };
-  const keys = new Set();
-  let pad = { active: false, x: 0, y: 0 };
 
-  // ---------------------------------------------------------- cameras
-  function cameraCard(cam, startOn) {
-    const el = document.createElement('div');
-    el.className = 'cam';
-    el.innerHTML = `
-      <div class="cam-head">
-        <div><span></span><small></small></div>
-        <button>เปิด</button>
-      </div>
-      <div class="view"><span>ปิดอยู่</span></div>`;
-    el.querySelector('.cam-head span').textContent = cam.label;
-    el.querySelector('.cam-head small').textContent = cam.topic;
-    const btn = el.querySelector('button');
-    const stream = streamView(el.querySelector('.view'));
-    const set = (on) => {
-      stream(on ? cam.name : null, cam.label);
-      btn.textContent = on ? 'ปิด' : 'เปิด';
-      btn.classList.toggle('on', on);
-      btn.dataset.on = on ? '1' : '';
-    };
-    btn.onclick = () => set(!btn.dataset.on);
-    set(startOn);
-    return el;
-  }
-
-  // A camera shown in `view`; returns a setter that switches it to another camera (or off).
-  // Frames come as JPEG messages on a WebSocket rather than an MJPEG <img>: browsers keep at
-  // most 6 HTTP connections per host and do not always drop an MJPEG stream when its src
-  // changes, so switching cameras used to leave new streams waiting forever (frozen view).
+  // ---------------------------------------------------------- cameras page: split screen (robot_web_ui)
+  // 1-9 tiles, each showing any camera (or lidar / depth / bird's-eye view).
+  const DEFAULT_TILES = ['front', 'back', 'left', 'right', 'lidar', 'depth', 'realsense', 'surround', 'obstacle'];
+  const CAM_TH = {
+    surround: "Bird's-eye view (รอบคัน)", front: 'กล้องหน้า (CSI)', back: 'กล้องหลัง (CSI)',
+    left: 'กล้องซ้าย (CSI)', right: 'กล้องขวา (CSI)', realsense: 'RealSense ภาพสี',
+    depth: 'RealSense ความลึก (depth)', lidar: 'Lidar (มุมบน)', obstacle: 'สิ่งกีดขวาง (depth มุมบน)',
+    person: 'ตรวจจับคน (RealSense)', detect: 'ตรวจจับวัตถุ (โมเดลที่ train)', map: 'แผนที่ (SLAM)',
+  };
+  const initSplit = (cameras) => RobotUI.splitScreen(cameras, { labels: CAM_TH, defaults: DEFAULT_TILES, page: 'cams' });
   const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
-  function streamView(view) {
-    let sock = null, img = null, shownUrl = null, loadingUrl = null, next = null, decoding = false, retry = null;
-    // One ack per frame shown or dropped: the server sends only a couple of frames ahead of
-    // the acks, so on slow Wi-Fi the view drops frames instead of lagging behind.
-    const ack = () => { if (sock && sock.readyState === WebSocket.OPEN) sock.send('1'); };
-    const show = (blob) => {
-      if (decoding) { if (next) ack(); next = blob; return; }   // keep only the newest frame while one decodes
-      decoding = true;
-      const url = loadingUrl = URL.createObjectURL(blob);
-      img.onload = img.onerror = () => {
-        if (shownUrl) URL.revokeObjectURL(shownUrl);
-        shownUrl = url; loadingUrl = null; decoding = false;
-        ack();
-        if (next) { const b = next; next = null; show(b); }
-      };
-      img.src = url;
-    };
-    const stop = () => {
-      clearTimeout(retry);
-      if (sock) { sock.onmessage = sock.onclose = null; sock.close(); sock = null; }
-      if (img) { img.onload = img.onerror = null; img = null; }
-      [shownUrl, loadingUrl].forEach(u => { if (u) URL.revokeObjectURL(u); });
-      shownUrl = loadingUrl = next = null; decoding = false;
-    };
-    return (name, alt) => {
-      stop();
-      if (!name) { view.innerHTML = '<span>ปิดอยู่</span>'; return; }
-      view.innerHTML = '<span>กำลังรอภาพ… (ถ้านานผิดปกติ node กล้องทำงานอยู่ไหม?)</span>';
-      const open = () => {
-        const s = sock = new WebSocket(`${wsProto}://${location.host}/ws/stream/${encodeURIComponent(name)}`);
-        s.onmessage = (ev) => {
-          if (!img) { img = new Image(); img.alt = alt || name; view.replaceChildren(img); }
-          show(ev.data);
-        };
-        s.onclose = () => {   // server restarted or network dropped: keep the last frame, retry
-          if (sock !== s) return;
-          sock = null;
-          retry = setTimeout(open, 1000);
-        };
-      };
-      open();
-    };
-  }
 
   // ---------------------------------------------------------- surround view
   const SIDE_NAMES = { front: 'กล้องหน้า', back: 'กล้องหลัง', left: 'กล้องซ้าย', right: 'กล้องขวา' };
@@ -760,11 +644,177 @@
     if (side === shownSide) return;
     shownSide = side;
     sideStream(side, side && SIDE_NAMES[side]);
+    setTimeout(() => fitSide(true), 0);
   }
   $('bev-toggle').onclick = () => setBev(!bevOn);
   document.querySelectorAll('#side-seg button').forEach(b => {
     b.onclick = () => { sideMode = b.dataset.side; if (!bevOn) setBev(true); else updateSide(); };
   });
+
+  // ---------------------------------------------------------- driving dashboard + guide lines
+  // Dashboard: measured speed (odometry; the command when there is none), gear, steering, who
+  // drives, battery, and the nearest lidar return around the car. Guide lines: where the car
+  // goes with the current steering, drawn on the front (or, reversing, back) camera image with
+  // the same camera calibration as the bird's-eye view.
+  const AUTO_TH = { avoid: 'หลบสิ่งกีดขวางอัตโนมัติ', follow: 'ติดตามคน', nav: 'นำทาง (Nav2)' };
+  let guideOn = true, guideSteer = 0;
+  try { guideOn = localStorage.getItem('qcar2.guide') !== '0'; } catch (e) {}
+  $('guide-toggle').classList.toggle('on', guideOn);
+  $('guide-toggle').onclick = (e) => {
+    guideOn = !guideOn; e.currentTarget.classList.toggle('on', guideOn); e.currentTarget.blur();
+    try { localStorage.setItem('qcar2.guide', guideOn ? '1' : '0'); } catch (err) {}
+    drawGuide();
+  };
+  const level = (d) => d == null ? '' : d < 0.3 ? 'near' : d < 0.6 ? 'mid' : 'far';
+  function renderDash(s) {
+    const out = s.output, cmd = out ? out.speed_mps : 0, v = s.speed;
+    const shown = v != null ? v : (out ? cmd : null);
+    $('d-speed').textContent = shown != null ? Math.abs(shown).toFixed(2) : '–';
+    $('d-speed-src').textContent = v != null ? 'วัดจากล้อ' : out ? 'ตามคำสั่ง' : '';
+    const ref = v != null && Math.abs(v) > 0.02 ? v : cmd;
+    const gear = ref < -0.01 ? 'R' : ref > 0.01 ? 'D' : 'N';
+    $('d-gear').textContent = gear; $('d-gear').className = 'd-gear ' + gear;
+    guideSteer = out ? out.steer_rad : 0;
+    const deg = guideSteer * 180 / Math.PI, max = limits.max_steer || 0.5;
+    $('d-needle').style.transform = `rotate(${-Math.max(-1, Math.min(1, guideSteer / max)) * 70}deg)`;
+    $('d-steer').textContent = Math.abs(deg) < 0.5 ? 'ตรง' : `${Math.abs(deg).toFixed(0)}° ${deg > 0 ? 'ซ้าย' : 'ขวา'}`;
+    const m = $('d-mode');
+    if (state.estop) { m.textContent = 'E-STOP'; m.className = 'bad'; }
+    else if (state.auto) { m.textContent = AUTO_TH[state.auto] || state.auto; m.className = 'ok'; }
+    else if (state.control === 'me') { m.textContent = 'คุณควบคุม'; m.className = 'ok'; }
+    else if (state.control === 'other') { m.textContent = 'คนอื่นควบคุม'; m.className = 'warn'; }
+    else { m.textContent = 'ไม่มีผู้ควบคุม'; m.className = ''; }
+    $('d-cmd').textContent = out ? `คำสั่ง ${cmd.toFixed(2)} m/s` : 'ไม่มีคำสั่ง';
+    const b = s.battery || {};
+    $('d-batt').textContent = b.voltage != null ? b.voltage.toFixed(1) + ' V' : '–';
+    const p = s.proximity || {};
+    ['front', 'back', 'left', 'right'].forEach(k => {
+      const d = s.proximity ? p[k] : null, lv = level(d);
+      $('p-' + k).textContent = d != null ? d.toFixed(2) + ' m' : (s.proximity ? '> 3 m' : '–');
+      $('p-' + k).className = lv; $('pb-' + k).setAttribute('class', lv);
+    });
+    // Text of a different length (mode, command, steering) can change how the bars wrap:
+    // size them again then, or whenever a bar's content no longer fits.
+    const sig = [m.textContent, $('d-cmd').textContent.length, $('d-steer').textContent.length,
+                 ...['front', 'back', 'left', 'right'].map(k => $('p-' + k).textContent.length)].join('|');
+    const over = ['dash-top', 'dash-bot'].some(id => { const el = $(id); return el.scrollHeight > el.clientHeight + 1; });
+    if (sig !== dashSig || over) { dashSig = sig; fitSide(true); } else fitSide();
+  }
+  let dashSig = '';
+  function camRotation(c) {   // camera frame (x right, y down, z optical axis) -> vehicle, as surround.py
+    const r = Math.PI / 180, y = c.yaw * r, p = c.pitch * r, o = c.roll * r;
+    const cy = Math.cos(y), sy = Math.sin(y), cp = Math.cos(p), sp = Math.sin(p), co = Math.cos(o), so = Math.sin(o);
+    const A = [[cy * cp, cy * sp * so - sy * co, cy * sp * co + sy * so],
+               [sy * cp, sy * sp * so + cy * co, sy * sp * co - cy * so],
+               [-sp, cp * so, cp * co]];                         // Rz @ Ry @ Rx
+    return A.map(row => [-row[1], -row[2], row[0]]);           // @ base: cam x = -y, cam y = -z, cam z = +x
+  }
+  function projectCam(cam, it, R, P) {   // vehicle point -> fisheye pixel at calibration size, or null
+    const d = [P[0] - cam.x, P[1] - cam.y, P[2] - cam.z];
+    const x = R[0][0] * d[0] + R[1][0] * d[1] + R[2][0] * d[2];
+    const y = R[0][1] * d[0] + R[1][1] * d[1] + R[2][1] * d[2];
+    const z = R[0][2] * d[0] + R[1][2] * d[1] + R[2][2] * d[2];
+    const r = Math.hypot(x, y), th = Math.atan2(r, z);
+    if (th > it.max_angle_deg * Math.PI / 180) return null;
+    const t2 = th * th, thd = th * (1 + t2 * (it.k1 + t2 * (it.k2 + t2 * (it.k3 + t2 * it.k4))));
+    const sc = r > 1e-9 ? thd / r : 1;
+    const u = it.fx * x * sc + it.cx, v = it.fy * y * sc + it.cy;
+    return u < -50 || v < -50 || u > it.calib_width + 50 || v > it.calib_height + 50 ? null : [u, v];
+  }
+  function drawGuide() {
+    const cv = $('guide'), view = $('side-view');
+    Object.assign(cv.style, { left: view.offsetLeft + 'px', top: view.offsetTop + 'px',
+                              width: view.offsetWidth + 'px', height: view.offsetHeight + 'px' });
+    const dpr = Math.min(devicePixelRatio || 1, 2), W = view.clientWidth, H = view.clientHeight;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const side = shownSide, img = view.querySelector('img'), cfg = surroundCfg;
+    if (!guideOn || $('calib').open || !cfg || !img || !img.naturalWidth || (side !== 'front' && side !== 'back')) return;
+    const cam = cfg.cameras[side], it = cfg.intrinsics, R = camRotation(cam);
+    const nw = img.naturalWidth, nh = img.naturalHeight;
+    const sc = Math.min(W / nw, H / nh);
+    const ox = (W - nw * sc) / 2, oy = (H - nh * sc) / 2;
+    const scr = (P) => {
+      const q = projectCam(cam, it, R, P);
+      return q && [ox + ((q[0] + 0.5) * nw / it.calib_width - 0.5) * sc, oy + ((q[1] + 0.5) * nh / it.calib_height - 0.5) * sc];
+    };
+    // Bicycle model around the rear axle (wheelbase 0.256 m, axles at +-0.128 m).
+    const L = cfg.car_length, Wc = cfg.car_width, wb = 0.256, xr = -wb / 2, k = Math.tan(guideSteer) / wb;
+    const rev = side === 'back', dir = rev ? -1 : 1, a = rev ? -L / 2 - xr : L / 2 - xr;
+    const pt = (s, d) => {
+      const th = k * s, ax = Math.abs(k) < 1e-6 ? [xr + s, 0] : [xr + Math.sin(th) / k, (1 - Math.cos(th)) / k];
+      return [ax[0] + a * Math.cos(th) - d * Math.sin(th), ax[1] + a * Math.sin(th) + d * Math.cos(th), 0];
+    };
+    const MAX = 1.5, edges = [Wc / 2, -Wc / 2].map(d => {
+      const pts = [];
+      for (let s = 0; s <= MAX + 1e-6; s += 0.025) pts.push(scr(pt(dir * s, d)));
+      return pts;
+    });
+    // translucent band between the two edges
+    const [lp, rp] = edges;
+    const band = lp.filter(Boolean).concat(rp.filter(Boolean).reverse());
+    if (band.length > 3) {
+      ctx.beginPath(); band.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.closePath();
+      ctx.fillStyle = 'rgba(240,169,43,.12)'; ctx.fill();
+    }
+    const poly = (pts, color, w) => {
+      ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineJoin = ctx.lineCap = 'round';
+      let open = false;
+      ctx.beginPath();
+      pts.forEach(q => { if (!q) { open = false; return; } if (open) ctx.lineTo(q[0], q[1]); else { ctx.moveTo(q[0], q[1]); open = true; } });
+      ctx.stroke();
+    };
+    edges.forEach(e => { poly(e, 'rgba(0,0,0,.55)', 6); poly(e, '#f0c040', 3); });
+    // distance marks
+    [[0.3, '#e5484d'], [0.6, '#f0a92b'], [1.0, '#2fbf71']].forEach(([s, color]) => {
+      const q1 = scr(pt(dir * s, Wc / 2)), q2 = scr(pt(dir * s, -Wc / 2));
+      if (!q1 || !q2) return;
+      poly([q1, q2], 'rgba(0,0,0,.55)', 6); poly([q1, q2], color, 3);
+      ctx.font = '600 12px system-ui, sans-serif'; ctx.fillStyle = color;
+      ctx.fillText(s.toFixed(1) + ' m', Math.max(q1[0], q2[0]) + 6, (q1[1] + q2[1]) / 2 + 4);
+    });
+  }
+  // Tablet/computer: the picture keeps its own size (full width, its own aspect ratio, never
+  // cropped); the room left above and below goes to the two dashboard bars, whose text and
+  // gauges grow with it (up to 3x, smaller again if it would not fit the width).
+  // Phone: bars at their normal size, the window takes the picture's height.
+  let fitKey = '';
+  function fitSide(force) {
+    const stack = $('side-stack'), inner = $('side-inner'), view = $('side-view');
+    const top = $('dash-top'), bot = $('dash-bot');
+    const img = view.querySelector('img');
+    const ar = img && img.naturalWidth ? img.naturalWidth / img.naturalHeight : 2;
+    const W = stack.clientWidth, H = stack.clientHeight;
+    const limitH = getComputedStyle(stack).flexBasis === '0px';   // tablet/computer or maximised
+    const key = `${W}x${H}x${ar.toFixed(3)}x${limitH}`;
+    if (force !== true && key === fitKey) { drawGuide(); return; }
+    fitKey = key;
+    inner.style.width = W + 'px';
+    [top, bot].forEach(el => { el.style.fontSize = ''; el.style.height = ''; });
+    const t1 = top.offsetHeight, b1 = bot.offsetHeight;
+    let h = W / ar;
+    if (limitH) {
+      h = Math.max(60, Math.min(h, H - t1 - b1));
+      const spare = Math.max(0, H - h), tH = Math.floor(spare * t1 / (t1 + b1)), bH = Math.floor(spare - tH);
+      [[top, tH, t1], [bot, bH, b1]].forEach(([el, target, base]) => {
+        // Largest scale whose layout still matches the normal one (no extra wrapped lines).
+        let sc = Math.min(3, target / base);
+        for (let i = 0; i < 14; i++) {
+          el.style.fontSize = (14 * sc) + 'px';
+          const natural = el.offsetHeight;
+          if (sc <= 1 || (natural <= target + 1 && natural <= base * sc * 1.1 && el.scrollWidth <= el.clientWidth + 1)) break;
+          sc = Math.max(1, sc * 0.9);
+        }
+        el.style.fontSize = (14 * Math.max(1, sc * 0.85)) + 'px';   // a little under the largest that fits
+        el.style.height = target + 'px';
+      });
+    }
+    view.style.height = Math.floor(h) + 'px';
+    drawGuide();
+  }
+  if (window.ResizeObserver) new ResizeObserver(() => fitSide()).observe($('side-stack'));
+  addEventListener('resize', () => fitSide());
 
   // ---------------------------------------------------------- surround calibration
   const CAM_SLIDERS = [
@@ -843,33 +893,50 @@
       .catch(e => { $('calib-status').textContent = 'ผิดพลาด: ' + e.message; throw e; });
   }
 
-  // Calibration preview: while the panel is open it shows the bird's-eye view with the chosen
-  // camera's area outlined, plus that camera's raw image, next to the sliders.
-  const calibBev = streamView($('calib-bev'));
-  const calibRaw = streamView($('calib-raw'));
-  let bevWasOn = false;
+  // Calibrating happens on the drive page: the bird's-eye view outlines the chosen camera's
+  // area and the camera window next to it shows that camera's raw image.
+  let bevWasOn = false, sideWas = 'auto';
   function selectCalibSide(side) {
     calibSide = side;
     renderCalib();
     if (!$('calib').open) return;
-    calibRaw(side, SIDE_NAMES[side]);
+    sideMode = side; updateSide();
     postSurround({ highlight: side }).catch(() => {});
   }
   $('calib').addEventListener('toggle', () => {
     const open = $('calib').open;
-    $('surround-box').hidden = open;   // the preview replaces the views above while calibrating
+    document.body.classList.toggle('calib-open', open);
+    $('btn-calib').classList.toggle('on', open);
     if (open) {
-      bevWasOn = bevOn;
-      calibBev('surround', 'Surround view');   // before closing the other view, so the surround
-      setBev(false);                           // stream never drops to zero viewers (that clears the highlight)
+      bevWasOn = bevOn; sideWas = sideMode;
+      if (!bevOn) setBev(true);
       selectCalibSide(calibSide);
     } else {
-      calibBev(null);
-      calibRaw(null);
       postSurround({ highlight: null }).catch(() => {});
-      setBev(bevWasOn);
+      sideMode = sideWas;
+      if (bevWasOn) updateSide(); else setBev(false);
     }
+    nudge();
   });
+  $('btn-calib').onclick = (e) => { $('calib').open = !$('calib').open; e.currentTarget.blur(); };
+  $('calib-close').onclick = (e) => { $('calib').open = false; e.currentTarget.blur(); };
+  // Tablet/computer: while open, the panel lives in the control panel right under E-STOP, so the
+  // views keep their room (car control stays below it). Phone: it stays under the bird's-eye view.
+  const calibHome = document.createComment('calibration panel');
+  $('calib').before(calibHome);
+  function placeCalib() {
+    const el = $('calib'), aside = $('ctrl-aside');
+    const inAside = el.open && document.body.classList.contains('desk');
+    if (inAside && el.parentElement !== aside) {
+      $('btn-estop').after(el);
+      aside.scrollTop = 0;
+      if (getComputedStyle(aside).position === 'fixed' && !aside.classList.contains('open')) $('dock-ctrl').click();   // bottom sheet: open it
+    } else if (!inAside && el.parentElement === aside) {
+      calibHome.after(el);
+    }
+  }
+  $('calib').addEventListener('toggle', placeCalib);
+  matchMedia('(max-width: 700px), (max-height: 520px) and (max-width: 1100px)').addEventListener?.('change', () => setTimeout(placeCalib, 0));
   document.querySelectorAll('#calib-cam button').forEach(b => { b.onclick = () => selectCalibSide(b.dataset.side); });
   $('calib-grid').onchange = () => queueSurround({ show_grid: $('calib-grid').checked }, false);
   $('calib-save').onclick = () => {
@@ -881,7 +948,239 @@
     pending = {}; needFull = false;
     postSurround({ reset: true }).then(() => { renderCalib(); $('calib-status').textContent = 'ค่าเริ่มต้น (ยังไม่ได้บันทึก)'; });
   };
-  fetch('/api/surround').then(r => r.json()).then(cfg => { surroundCfg = cfg; renderCalib(); });
+  fetch('/api/surround').then(r => r.json()).then(cfg => {
+    surroundCfg = cfg; renderCalib();
+    if (cfg.view && cfg.view.elev <= 89.5) postSurround({ config: { view: { elev: 90 } }, save: true }).catch(() => {});
+  });
+
+  // ---- Virtual model of the car and its four CSI cameras, under the bird's-eye view ----
+  // Built from the calibration (x, y, z, yaw, pitch, roll of each camera), so it shows where the
+  // cameras sit and where they look. Drag = rotate, right-drag / Shift = pan, wheel / pinch =
+  // zoom, double-click = reset. Clicking a camera outlines its area in the bird's-eye view.
+  (() => {
+    const canvas = $('vmodel-canvas'), wrap = $('vmodel'), sel = $('vmodel-sel'), ctx = canvas.getContext('2d');
+    const DEF = { yaw: 2.45, elev: 0.6, dist: 1.25, tx: 0, ty: 0, tz: 0.06 };
+    const view = { ...DEF };
+    const COLOR = { front: '#3b8cff', back: '#e5484d', left: '#2fbf71', right: '#f0a92b' };
+    const SIDE_TH = { front: 'กล้องหน้า', back: 'กล้องหลัง', left: 'กล้องซ้าย', right: 'กล้องขวา' };
+    let selected = null, dirty = false, lastKey = '', proj = null, camPx = {};
+    const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+    const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const norm = (a) => mul(a, 1 / Math.hypot(...a));
+    const mm = (A, B) => A.map(r => [0, 1, 2].map(j => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
+    const mv = (M, v) => M.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+    // Same convention as surround.py: camera frame (x right, y down, z optical axis) -> vehicle.
+    function camRot(c) {
+      const r = Math.PI / 180, y = c.yaw * r, p = c.pitch * r, o = c.roll * r;
+      const Rz = [[Math.cos(y), -Math.sin(y), 0], [Math.sin(y), Math.cos(y), 0], [0, 0, 1]];
+      const Ry = [[Math.cos(p), 0, Math.sin(p)], [0, 1, 0], [-Math.sin(p), 0, Math.cos(p)]];
+      const Rx = [[1, 0, 0], [0, Math.cos(o), -Math.sin(o)], [0, Math.sin(o), Math.cos(o)]];
+      return mm(mm(mm(Rz, Ry), Rx), [[0, 0, 1], [-1, 0, 0], [0, -1, 0]]);
+    }
+    function setupProj(w, h) {
+      const t = [view.tx, view.ty, view.tz], ce = Math.cos(view.elev);
+      const eye = add(t, mul([ce * Math.cos(view.yaw), ce * Math.sin(view.yaw), Math.sin(view.elev)], view.dist));
+      const f = norm(sub(t, eye)), right = norm(cross(f, [0, 0, 1])), down = cross(f, right), F = Math.min(w, h * 1.6) * 0.9;
+      proj = { eye, f, right, down, F, w, h };
+    }
+    function P(p) {
+      const d = sub(p, proj.eye), z = dot(d, proj.f);
+      if (z < 0.02) return null;
+      return [proj.w / 2 + proj.F * dot(d, proj.right) / z, proj.h / 2 + proj.F * dot(d, proj.down) / z, z];
+    }
+    // A box as 6 faces (for the painter's algorithm); c = centre, s = half sizes.
+    function box(faces, c, s, color, tag) {
+      const v = (i, j, k) => [c[0] + i * s[0], c[1] + j * s[1], c[2] + k * s[2]];
+      [[[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1], [1, 0, 0]],
+       [[-1, 1, -1], [-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 0, 0]],
+       [[1, 1, -1], [-1, 1, -1], [-1, 1, 1], [1, 1, 1], [0, 1, 0]],
+       [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1], [0, -1, 0]],
+       [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1], [0, 0, 1]],
+       [[-1, 1, -1], [1, 1, -1], [1, -1, -1], [-1, -1, -1], [0, 0, -1]]].forEach(q => {
+        const pts = q.slice(0, 4).map(a => v(...a)), n = q[4];
+        const ctr = [c[0] + n[0] * s[0], c[1] + n[1] * s[1], c[2] + n[2] * s[2]];
+        if (dot(n, sub(ctr, proj.eye)) >= 0) return;            // facing away
+        const light = 0.55 + 0.45 * Math.max(0, dot(n, norm([0.3, 0.5, 1])));
+        faces.push({ pts, color, light, depth: dot(sub(ctr, proj.eye), proj.f), tag });
+      });
+    }
+    const shade = (hex, k) => {
+      const n = parseInt(hex.slice(1), 16);
+      return `rgb(${Math.round((n >> 16 & 255) * k)},${Math.round((n >> 8 & 255) * k)},${Math.round((n & 255) * k)})`;
+    };
+    function line(a, b, color, width, dash) {
+      const pa = P(a), pb = P(b);
+      if (!pa || !pb) return;
+      ctx.strokeStyle = color; ctx.lineWidth = width || 1; ctx.setLineDash(dash || []);
+      ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(pb[0], pb[1]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    function draw() {
+      dirty = false;
+      const d = Math.min(devicePixelRatio || 1, 2), w = wrap.clientWidth, h = wrap.clientHeight;
+      if (!w || !h) return;
+      if (canvas.width !== Math.round(w * d) || canvas.height !== Math.round(h * d)) {
+        canvas.width = Math.round(w * d); canvas.height = Math.round(h * d);
+      }
+      ctx.setTransform(d, 0, 0, d, 0, 0);
+      ctx.fillStyle = '#0b0e12'; ctx.fillRect(0, 0, w, h);
+      setupProj(w, h);
+      const cfg = surroundCfg;
+      const L = cfg ? cfg.car_length : 0.425, W = cfg ? cfg.car_width : 0.192;
+      // ground grid, 10 cm
+      for (let i = -8; i <= 8; i++) {
+        const g = i * 0.1, c = i === 0 ? '#2f3a46' : '#1b222a';
+        line([g, -0.8, 0], [g, 0.8, 0], c); line([-0.8, g, 0], [0.8, g, 0], c);
+      }
+      line([L / 2 + 0.03, 0, 0.001], [L / 2 + 0.22, 0, 0.001], '#3b8cff', 2);   // forward arrow
+      line([L / 2 + 0.22, 0, 0.001], [L / 2 + 0.17, 0.03, 0.001], '#3b8cff', 2);
+      line([L / 2 + 0.22, 0, 0.001], [L / 2 + 0.17, -0.03, 0.001], '#3b8cff', 2);
+      const fwd = P([L / 2 + 0.26, 0, 0]);
+      ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
+      if (fwd) { ctx.fillStyle = '#3b8cff'; ctx.fillText('ด้านหน้า', fwd[0], fwd[1]); }
+
+      // car body: chassis, deck, four wheels
+      const faces = [];
+      box(faces, [0, 0, 0.075], [L / 2, W / 2 - 0.02, 0.035], '#5b6774');
+      box(faces, [-0.02, 0, 0.135], [L * 0.32, W / 2 - 0.03, 0.025], '#46515d');
+      [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([sx, sy]) =>
+        box(faces, [sx * 0.128, sy * (W / 2 - 0.016), 0.033], [0.033, 0.016, 0.033], '#22282f'));
+      // cameras: small blocks at their calibrated positions
+      const cams = cfg ? cfg.cameras : {};
+      const rots = {};
+      Object.entries(cams).forEach(([side, c]) => {
+        rots[side] = camRot(c);
+        box(faces, [c.x, c.y, c.z], [0.012, 0.012, 0.012], COLOR[side] || '#ccc', side);
+      });
+      faces.sort((a, b) => b.depth - a.depth).forEach(fc => {
+        const pp = fc.pts.map(P);
+        if (pp.some(p => !p)) return;
+        ctx.beginPath(); pp.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+        ctx.fillStyle = shade(fc.color, fc.light); ctx.fill();
+        ctx.strokeStyle = fc.tag && fc.tag === selected ? '#fff' : 'rgba(0,0,0,.35)'; ctx.lineWidth = fc.tag === selected ? 2 : 1; ctx.stroke();
+      });
+      // view cones: wide-angle lens, drawn 18 cm long; optical axis dashed to the ground
+      camPx = {};
+      const tanH = Math.tan(65 * Math.PI / 180), tanV = Math.tan(35 * Math.PI / 180), len = 0.18;
+      Object.entries(cams).forEach(([side, c]) => {
+        const R = rots[side], o = [c.x, c.y, c.z], col = COLOR[side] || '#ccc', on = !selected || selected === side;
+        const corners = [[-tanH, -tanV], [tanH, -tanV], [tanH, tanV], [-tanH, tanV]]
+          .map(([a, b]) => add(o, mul(norm(mv(R, [a, b, 1])), len)));
+        const pc = corners.map(P), po = P(o);
+        if (po && pc.every(Boolean)) {
+          ctx.globalAlpha = on ? (selected === side ? 0.35 : 0.16) : 0.05;
+          ctx.fillStyle = col;
+          for (let i = 0; i < 4; i++) {
+            const a = pc[i], b = pc[(i + 1) % 4];
+            ctx.beginPath(); ctx.moveTo(po[0], po[1]); ctx.lineTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.closePath(); ctx.fill();
+          }
+          ctx.globalAlpha = on ? 0.9 : 0.25;
+          corners.forEach((p, i) => { line(o, p, col); line(p, corners[(i + 1) % 4], col); });
+          ctx.globalAlpha = 1;
+        }
+        const axis = mv(R, [0, 0, 1]);
+        const tg = axis[2] < -0.05 ? Math.min(1.2, -c.z / axis[2]) : 0.5;   // to the ground if it looks down
+        line(o, add(o, mul(axis, tg)), col, 1.5, [4, 3]);
+        if (po) {
+          camPx[side] = po;
+          ctx.fillStyle = selected === side ? '#fff' : col; ctx.font = '600 12px system-ui, sans-serif';
+          ctx.fillText(SIDE_TH[side] || side, po[0], po[1] - 12);
+        }
+      });
+      showSel();
+    }
+    function showSel() {
+      const c = selected && surroundCfg && surroundCfg.cameras[selected];
+      sel.hidden = !c;
+      if (!c) return;
+      const f = (v, n) => Number(v).toFixed(n);
+      sel.innerHTML = `<b style="color:${COLOR[selected]}">${SIDE_TH[selected]}</b> ` +
+        `x ${f(c.x, 3)} · y ${f(c.y, 3)} · z ${f(c.z, 3)} m<br>yaw ${f(c.yaw, 1)}° · pitch ${f(c.pitch, 1)}° · roll ${f(c.roll, 1)}°`;
+    }
+    // Next animation frame, with a timer as fallback (some browsers pause frames in the background).
+    const drawIfDirty = () => { if (dirty) draw(); };
+    const redraw = () => { if (!dirty) { dirty = true; requestAnimationFrame(drawIfDirty); setTimeout(drawIfDirty, 80); } };
+    function select(side) {
+      if (side === selected) side = null;
+      selected = side; redraw();
+      if ($('calib').open) { if (side) selectCalibSide(side); return; }   // calibrating: pick that camera
+      postSurround({ highlight: side }).catch(() => {});
+    }
+    // ---- mouse / touch
+    const pts = new Map();
+    let mode = null, last = null, moved = 0, pinch = 0;
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('pointerdown', e => {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); mode = 'pinch'; return; }
+      mode = (e.button === 2 || e.shiftKey) ? 'pan' : 'rot'; last = [e.clientX, e.clientY]; moved = 0;
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (mode === 'pinch' && pts.size === 2) {
+        const [a, b] = [...pts.values()], dd = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch) view.dist = Math.min(4, Math.max(0.3, view.dist * pinch / dd));
+        pinch = dd; redraw(); return;
+      }
+      if (!last) return;
+      const dx = e.clientX - last[0], dy = e.clientY - last[1];
+      last = [e.clientX, e.clientY]; moved += Math.abs(dx) + Math.abs(dy);
+      if (mode === 'rot') {
+        view.yaw -= dx * 0.01; view.elev = Math.min(1.5, Math.max(-0.05, view.elev + dy * 0.008));
+      } else if (mode === 'pan' && proj) {
+        const k = view.dist / proj.F;
+        const r = norm([proj.right[0], proj.right[1], 0]), fw = norm([proj.f[0], proj.f[1], 0]);
+        view.tx += (-dx * r[0] + dy * fw[0]) * k; view.ty += (-dx * r[1] + dy * fw[1]) * k;
+      }
+      redraw();
+    });
+    const end = e => {
+      const wasClick = mode === 'rot' && moved < 5 && pts.size === 1;
+      pts.delete(e.pointerId);
+      if (pts.size === 0) { mode = null; last = null; }
+      if (wasClick) {
+        const r = canvas.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+        let best = null, bd = 18;
+        Object.entries(camPx).forEach(([s, p]) => { const dd = Math.hypot(p[0] - x, p[1] - y); if (dd < bd) { bd = dd; best = s; } });
+        select(best);
+      }
+    };
+    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('wheel', e => {
+      e.preventDefault();
+      view.dist = Math.min(4, Math.max(0.3, view.dist * Math.exp(e.deltaY * 0.0012))); redraw();
+    }, { passive: false });
+    canvas.addEventListener('dblclick', () => { Object.assign(view, DEF); redraw(); });
+    if (window.ResizeObserver) new ResizeObserver(redraw).observe(wrap);
+    addEventListener('resize', redraw);
+    // follow calibration changes
+    setInterval(() => {
+      if (!surroundCfg || document.body.dataset.page !== 'drive' && !$('calib').open) return;
+      const key = JSON.stringify([surroundCfg.cameras, surroundCfg.car_length, surroundCfg.car_width]);
+      if (key !== lastKey) { lastKey = key; redraw(); }
+    }, 300);
+    addEventListener(RobotUI.PAGE_EVENT, redraw);
+    redraw();
+  })();
+
+  // Calibrating needs the straight-down view; the 3D view comes back when the panel closes.
+  let viewBeforeCalib = null;
+  $('calib').addEventListener('toggle', () => {
+    if (!surroundCfg || !surroundCfg.view) return;
+    if ($('calib').open) {
+      if (surroundCfg.view.elev <= 89.5) {
+        viewBeforeCalib = { ...surroundCfg.view };
+        postSurround({ config: { view: { elev: 90 } } }).catch(() => {});
+      }
+    } else if (viewBeforeCalib) {
+      postSurround({ config: { view: viewBeforeCalib } }).catch(() => {});
+      viewBeforeCalib = null;
+    }
+  });
 
   // ---------------------------------------------------------- obstacles
   const OBS_SLIDERS = [
@@ -1019,9 +1318,8 @@
     limits = info.limits;
     $('timeout-label').textContent = limits.command_timeout;
     updateSpeedHint();
-    const grid = $('grid');
-    info.cameras.filter(c => !['surround', 'obstacle', 'person', 'map'].includes(c.name)).forEach(c => grid.appendChild(cameraCard(c, false)));
-    setBev(info.cameras.some(c => c.name === 'surround'));
+    initSplit(info.cameras);
+    setBev(info.cameras.some(c => c.name === 'surround') && document.body.dataset.page === 'drive');
   });
 
   // ---------------------------------------------------------- map + Nav2
@@ -1052,91 +1350,340 @@
   let method = 'lidar';
   try { const m = localStorage.getItem('qcar2.method'); if (METHODS[m]) method = m; } catch (e) {}
 
+  // ---------------------------------------------------------- map, drawn in the browser (like RViz)
+  // The server sends the occupancy grid (only when it changes) and, 5 times a second, the car pose,
+  // lidar scan, Nav2 path and goal in map metres (/ws/map). Everything is drawn here at screen
+  // resolution, so it stays sharp at any zoom. View controls as RViz's TopDownOrtho camera:
+  // left-drag = rotate, middle-drag / Shift+drag = move, right-drag / wheel = zoom;
+  // touch: one finger = move, two = zoom + rotate. "ตั้งเป้าหมาย" / "ตั้งตำแหน่งรถ" work like
+  // RViz's 2D Goal Pose / 2D Pose Estimate: press where, drag towards the heading.
   const mapView = $('map-view');
-  const mapStream = streamView(mapView);
-  let mapOn = false, drag = null;
-  const mapCanvas = document.createElement('canvas');
+  mapView.innerHTML = '<canvas id="map-canvas"></canvas><div class="map-msg" id="map-msg">ปิดอยู่</div>';
+  const mc = $('map-canvas'), mctx = mc.getContext('2d');
+  const cam = { cx: 0, cy: 0, s: 60, a: 0, fitted: false };   // view centre (m), px per metre, rotation (rad)
+  let mapOn = false, mapWs = null, mapRetry = null, mapLive = false;
+  let gridHead = null, gridCanvas = null, gridBox = null, gridWait = false, mst = null;
+  let gridRaw = null, gridSerial = 0;   // occupancy per cell (255 = unknown), for the 3D walls
+  let follow = false, drag = null;    // drag: arrow being drawn {a: [x, y], b: [x, y], tool}
   function setMap(on) {
     mapOn = on;
-    mapStream(on ? 'map' : null, 'Map');
-    if (on) mapView.appendChild(mapCanvas);
     $('map-toggle').textContent = on ? 'ปิด' : 'เปิด';
     $('map-toggle').classList.toggle('on', on);
+    if (on) openMap(); else closeMap();
+    drawMap();
   }
   $('map-toggle').onclick = () => setMap(!mapOn);
-  $('jump-map').addEventListener('click', () => { if (!mapOn) setMap(true); });
-  // streamView replaces the view's children when the first frame arrives: put the canvas back.
-  new MutationObserver(() => {
-    if (mapOn && !mapView.contains(mapCanvas)) mapView.appendChild(mapCanvas);
-  }).observe(mapView, { childList: true });
-
-  // Pointer position as fractions (0..1) of the map image, which is letterboxed (object-fit: contain).
-  function mapFrac(e) {
-    const img = mapView.querySelector('img');
-    if (!img || !img.naturalWidth) return null;
-    const r = img.getBoundingClientRect();
-    const k = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
-    const w = img.naturalWidth * k, h = img.naturalHeight * k;
-    const u = (e.clientX - r.left - (r.width - w) / 2) / w;
-    const v = (e.clientY - r.top - (r.height - h) / 2) / h;
-    return { u, v, x: e.clientX - mapView.getBoundingClientRect().left, y: e.clientY - mapView.getBoundingClientRect().top };
+  function openMap() {
+    clearTimeout(mapRetry);
+    const s = mapWs = new WebSocket(`${wsProto}://${location.host}/ws/map`);
+    s.onopen = () => { mapLive = true; drawMap(); };
+    s.onmessage = (ev) => {
+      if (mapWs !== s) return;
+      if (typeof ev.data !== 'string') { if (gridWait) { gridWait = false; loadGrid(ev.data, gridHead); } return; }
+      const m = JSON.parse(ev.data);
+      if (m.type === 'grid') {
+        gridHead = m.grid; gridWait = !!m.grid;
+        if (!m.grid) { gridCanvas = null; gridBox = null; cam.fitted = false; }
+        drawMap();
+      } else if (m.type === 'map_state') {
+        mst = m;
+        if (follow && m.pose) { cam.cx = m.pose[0]; cam.cy = m.pose[1]; }
+        if (!cam.fitted && !gridHead && m.pose) { cam.cx = m.pose[0]; cam.cy = m.pose[1]; }
+        drawMap();
+      }
+    };
+    s.onclose = () => {
+      if (mapWs !== s) return;
+      mapWs = null; mapLive = false; drawMap();
+      if (mapOn) mapRetry = setTimeout(openMap, 1000);
+    };
   }
-  function drawDrag() {
-    const c = mapCanvas, ctx = c.getContext('2d');
-    c.width = mapView.clientWidth; c.height = mapView.clientHeight;
-    ctx.clearRect(0, 0, c.width, c.height);
-    if (!drag) return;
-    ctx.strokeStyle = ctx.fillStyle = '#f0a92b'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(drag.a.x, drag.a.y, 9, 0, 2 * Math.PI); ctx.stroke();
-    const dx = drag.b.x - drag.a.x, dy = drag.b.y - drag.a.y;
-    if (Math.hypot(dx, dy) > 6) {
-      const ang = Math.atan2(dy, dx);
-      ctx.beginPath(); ctx.moveTo(drag.a.x, drag.a.y); ctx.lineTo(drag.b.x, drag.b.y); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(drag.b.x, drag.b.y);
-      ctx.lineTo(drag.b.x - 12 * Math.cos(ang - 0.4), drag.b.y - 12 * Math.sin(ang - 0.4));
-      ctx.lineTo(drag.b.x - 12 * Math.cos(ang + 0.4), drag.b.y - 12 * Math.sin(ang + 0.4));
-      ctx.fill();
+  function closeMap() {
+    clearTimeout(mapRetry);
+    if (mapWs) { const s = mapWs; mapWs = null; s.onclose = s.onmessage = null; s.close(); }
+    mapLive = false;
+  }
+  // Grid PNG (grey: 255 = unknown, else occupancy 0..100) -> colours as RViz's "map" scheme.
+  function loadGrid(blob, head) {
+    createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }).then(bmp => {
+      if (head !== gridHead) return;
+      const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+      const x = c.getContext('2d'); x.drawImage(bmp, 0, 0);
+      const im = x.getImageData(0, 0, c.width, c.height), d = im.data;
+      const raw = new Uint8Array(c.width * c.height);
+      for (let p = 0, n = 0; p < d.length; p += 4, n++) raw[n] = d[p];
+      let i0 = 1e9, i1 = -1, j0 = 1e9, j1 = -1;
+      for (let p = 0, n = 0; p < d.length; p += 4, n++) {
+        const v = d[p];
+        if (v === 255) { d[p] = 112; d[p + 1] = 137; d[p + 2] = 134; }   // unknown
+        else {
+          const g = Math.round(254 - v * 2.54);                          // free = light, occupied = black
+          d[p] = d[p + 1] = d[p + 2] = g;
+          const j = n % c.width, i = (n - j) / c.width;
+          if (i < i0) i0 = i; if (i > i1) i1 = i; if (j < j0) j0 = j; if (j > j1) j1 = j;
+        }
+        d[p + 3] = 255;
+      }
+      x.putImageData(im, 0, 0);
+      gridCanvas = c;
+      gridRaw = raw; gridSerial++;
+      gridBox = i1 < 0 ? null : [head.ox + j0 * head.res, head.oy + i0 * head.res,
+                                  head.ox + (j1 + 1) * head.res, head.oy + (i1 + 1) * head.res];
+      if (!cam.fitted) fitMap();
+      drawMap();
+    }).catch(() => {});
+  }
+  function fitMap() {
+    const W = mapView.clientWidth, H = mapView.clientHeight;
+    let b = gridBox;
+    if (!b && mst && mst.pose) b = [mst.pose[0] - 1.5, mst.pose[1] - 1.5, mst.pose[0] + 1.5, mst.pose[1] + 1.5];
+    if (!b || !W || !H) return;
+    if (mst && mst.pose) b = [Math.min(b[0], mst.pose[0]), Math.min(b[1], mst.pose[1]), Math.max(b[2], mst.pose[0]), Math.max(b[3], mst.pose[1])];
+    const bw = b[2] - b[0] + 0.6, bh = b[3] - b[1] + 0.6;
+    cam.cx = (b[0] + b[2]) / 2; cam.cy = (b[1] + b[3]) / 2; cam.a = 0;
+    cam.s = Math.max(2, Math.min(2000, Math.min(W / bw, H / bh)));
+    cam.fitted = true;
+  }
+  const w2s = (x, y) => {
+    const dx = x - cam.cx, dy = y - cam.cy, c = Math.cos(cam.a), s = Math.sin(cam.a);
+    return [mapView.clientWidth / 2 + cam.s * (c * dx - s * dy), mapView.clientHeight / 2 - cam.s * (s * dx + c * dy)];
+  };
+  const s2w = (px, py) => {
+    const u = (px - mapView.clientWidth / 2) / cam.s, v = (mapView.clientHeight / 2 - py) / cam.s;
+    const c = Math.cos(cam.a), s = Math.sin(cam.a);
+    return [cam.cx + c * u + s * v, cam.cy - s * u + c * v];
+  };
+  let mapQueued = false;
+  function drawMap() {
+    if (mapQueued) return;
+    mapQueued = true;
+    const go = () => { if (mapQueued) { mapQueued = false; renderMap(); } };
+    requestAnimationFrame(go); setTimeout(go, 60);
+  }
+  function arrow(ctx, p, q, color, w) {
+    const ang = Math.atan2(q[1] - p[1], q[0] - p[0]), L = Math.hypot(q[0] - p[0], q[1] - p[1]), hl = Math.min(14, L * 0.4);
+    ctx.strokeStyle = ctx.fillStyle = color; ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(q[0], q[1]);
+    ctx.lineTo(q[0] - hl * Math.cos(ang - 0.45), q[1] - hl * Math.sin(ang - 0.45));
+    ctx.lineTo(q[0] - hl * Math.cos(ang + 0.45), q[1] - hl * Math.sin(ang + 0.45)); ctx.closePath(); ctx.fill();
+  }
+  function renderMap() {
+    const dpr = Math.min(devicePixelRatio || 1, 2), W = mapView.clientWidth, H = mapView.clientHeight;
+    if (!W || !H) return;
+    if (mc.width !== Math.round(W * dpr) || mc.height !== Math.round(H * dpr)) { mc.width = Math.round(W * dpr); mc.height = Math.round(H * dpr); }
+    const g = mctx;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.fillStyle = '#30353b'; g.fillRect(0, 0, W, H);
+    $('map-msg').textContent = !mapOn ? 'ปิดอยู่' : !mapLive ? 'กำลังเชื่อมต่อ…'
+      : !gridHead ? 'ยังไม่มีแผนที่ · เริ่มทำแผนที่ (แท็บ ①) หรือโหลดแผนที่ (แท็บ ②)' : '';
+    $('map-zoom-label').textContent = (W / cam.s).toFixed(W / cam.s < 10 ? 1 : 0) + ' m';
+    if (!mapOn) return;
+    const c = Math.cos(cam.a), s = Math.sin(cam.a);
+    if (gridCanvas && gridHead) {
+      const hd = gridHead, k = cam.s * hd.res;
+      const e = W / 2 + cam.s * (c * (hd.ox - cam.cx) - s * (hd.oy - cam.cy));
+      const f = H / 2 - cam.s * (s * (hd.ox - cam.cx) + c * (hd.oy - cam.cy));
+      g.save();
+      g.setTransform(dpr * k * c, -dpr * k * s, -dpr * k * s, -dpr * k * c, dpr * e, dpr * f);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(gridCanvas, 0, 0);
+      g.restore();
     }
+    // 1 m grid (as RViz's Grid display)
+    const cs = [[0, 0], [W, 0], [0, H], [W, H]].map(p => s2w(...p));
+    const xs = cs.map(p => p[0]), ys = cs.map(p => p[1]);
+    const step = cam.s < 6 ? 10 : cam.s < 14 ? 5 : 1;
+    if (cam.s * step >= 8) {
+      g.strokeStyle = 'rgba(160,160,160,.28)'; g.lineWidth = 1; g.beginPath();
+      for (let x = Math.floor(Math.min(...xs) / step) * step; x <= Math.max(...xs); x += step) {
+        const p = w2s(x, Math.min(...ys)), q = w2s(x, Math.max(...ys)); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]);
+      }
+      for (let y = Math.floor(Math.min(...ys) / step) * step; y <= Math.max(...ys); y += step) {
+        const p = w2s(Math.min(...xs), y), q = w2s(Math.max(...xs), y); g.moveTo(p[0], p[1]); g.lineTo(q[0], q[1]);
+      }
+      g.stroke();
+    }
+    // map origin axes (x red, y green)
+    const o = w2s(0, 0), ox = w2s(0.5, 0), oy = w2s(0, 0.5);
+    g.lineWidth = 2; g.strokeStyle = '#e5484d'; g.beginPath(); g.moveTo(o[0], o[1]); g.lineTo(ox[0], ox[1]); g.stroke();
+    g.strokeStyle = '#2fbf71'; g.beginPath(); g.moveTo(o[0], o[1]); g.lineTo(oy[0], oy[1]); g.stroke();
+    if (mst) {
+      if (mst.plan && mst.plan.length > 3) {           // Nav2 global plan
+        g.strokeStyle = '#2fbf71'; g.lineWidth = 3; g.lineJoin = 'round'; g.beginPath();
+        for (let i = 0; i < mst.plan.length; i += 2) { const p = w2s(mst.plan[i], mst.plan[i + 1]); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }
+        g.stroke();
+      }
+      if (mst.scan && mst.scan.length) {               // lidar scan
+        const r = Math.max(1.5, Math.min(4, cam.s * 0.015));
+        g.fillStyle = '#ff3b30';
+        for (let i = 0; i < mst.scan.length; i += 2) { const p = w2s(mst.scan[i], mst.scan[i + 1]); g.fillRect(p[0] - r, p[1] - r, 2 * r, 2 * r); }
+      }
+      if (mst.goal) {                                  // current Nav2 goal
+        const p = w2s(mst.goal[0], mst.goal[1]), L = Math.max(24, 0.5 * cam.s);
+        g.strokeStyle = '#f0a92b'; g.lineWidth = 2; g.beginPath(); g.arc(p[0], p[1], 8, 0, 2 * Math.PI); g.stroke();
+        const q = w2s(mst.goal[0] + Math.cos(mst.goal[2]) * L / cam.s, mst.goal[1] + Math.sin(mst.goal[2]) * L / cam.s);
+        arrow(g, p, q, '#f0a92b', 3);
+      }
+      if (mst.pose) {                                  // the car: footprint (base_link on the rear axle) + heading
+        const [x, y, yaw] = mst.pose, cy = Math.cos(yaw), sy = Math.sin(yaw);
+        const Lc = 0.425, Wc = 0.192;
+        const pts = [[-0.08, -Wc / 2], [Lc - 0.08, -Wc / 2], [Lc - 0.08, Wc / 2], [-0.08, Wc / 2]]
+          .map(([a, b]) => w2s(x + a * cy - b * sy, y + a * sy + b * cy));
+        g.fillStyle = 'rgba(59,140,255,.85)'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+        g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill(); g.stroke();
+        const p = w2s(x, y), L = Math.max(22, 0.45 * cam.s);
+        arrow(g, p, w2s(x + cy * L / cam.s, y + sy * L / cam.s), '#fff', 2);
+        if (cam.s * Lc < 14) { g.strokeStyle = '#3b8cff'; g.lineWidth = 2; g.beginPath(); g.arc(p[0], p[1], 10, 0, 2 * Math.PI); g.stroke(); }
+      }
+    }
+    if (drag) {                                        // goal / pose being picked
+      const p = w2s(...drag.a), q = w2s(...drag.b), col = drag.tool === 'pose' ? '#2fbf71' : '#f0a92b';
+      g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); g.arc(p[0], p[1], 9, 0, 2 * Math.PI); g.stroke();
+      if (Math.hypot(q[0] - p[0], q[1] - p[1]) > 6) arrow(g, p, q, col, 3);
+    }
+    // scale bar
+    const nice = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100].find(v => v * cam.s >= 60) || 100;
+    const bl = nice * cam.s;
+    g.strokeStyle = g.fillStyle = '#fff'; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(12, H - 14); g.lineTo(12 + bl, H - 14); g.moveTo(12, H - 19); g.lineTo(12, H - 9); g.moveTo(12 + bl, H - 19); g.lineTo(12 + bl, H - 9); g.stroke();
+    g.font = '12px system-ui, sans-serif'; g.textAlign = 'left';
+    g.fillText(nice >= 1 ? nice + ' m' : Math.round(nice * 100) + ' cm', 12, H - 22);
+    // which way the map's +x / +y point (the view can be rotated)
+    const cx0 = W - 30, cy0 = 30;
+    g.lineWidth = 2;
+    [[1, 0, '#e5484d', 'x'], [0, 1, '#2fbf71', 'y']].forEach(([ux, uy, col, t]) => {
+      const dx = c * ux - s * uy, dy = -(s * ux + c * uy);
+      g.strokeStyle = g.fillStyle = col; g.beginPath(); g.moveTo(cx0, cy0); g.lineTo(cx0 + dx * 18, cy0 + dy * 18); g.stroke();
+      g.fillText(t, cx0 + dx * 24 - 3, cy0 + dy * 24 + 4);
+    });
   }
-  const mapTool = () => ((document.querySelector('#map-tools button.on') || {}).dataset || {}).tool || 'goal';
-  document.querySelectorAll('#map-tools button').forEach(b => {
-    b.onclick = () => document.querySelectorAll('#map-tools button').forEach(x => x.classList.toggle('on', x === b));
+  addEventListener('resize', drawMap);
+  if (window.ResizeObserver) new ResizeObserver(drawMap).observe(mapView);
+
+  // ---- view buttons
+  const zoomView = (f, px, py) => {
+    const W = mapView.clientWidth, H = mapView.clientHeight;
+    if (px == null || follow) { px = W / 2; py = H / 2; }
+    const before = s2w(px, py);
+    cam.s = Math.max(2, Math.min(2000, cam.s * f));
+    const after = s2w(px, py);
+    cam.cx += before[0] - after[0]; cam.cy += before[1] - after[1];
+    drawMap();
+  };
+  document.querySelectorAll('.map-zoom button').forEach(b => {
+    b.onclick = () => {
+      const z = b.dataset.z;
+      if (z === 'in') zoomView(1.4); else if (z === 'out') zoomView(1 / 1.4);
+      else if (z === 'fit') { follow = false; fitMap(); drawMap(); }
+      else if (z === 'north') { cam.a = 0; drawMap(); }
+      else if (z === 'follow') {
+        follow = !follow;
+        if (follow && mst && mst.pose) { cam.cx = mst.pose[0]; cam.cy = mst.pose[1]; }
+        drawMap();
+      }
+      $('map-follow').classList.toggle('on', follow);
+      b.blur();
+    };
   });
+
+  // ---- mouse / touch
+  const mapTool = () => ((document.querySelector('#map-tools button.on') || {}).dataset || {}).tool || 'view';
+  document.querySelectorAll('#map-tools button').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('#map-tools button').forEach(x => x.classList.toggle('on', x === b));
+      mapView.classList.toggle('tool-view', b.dataset.tool === 'view'); b.blur();
+    };
+  });
+  mapView.classList.toggle('tool-view', mapTool() === 'view');
+  const ptrs = new Map();
+  let gesture = null;
+  const local = (e) => { const r = mapView.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const two = () => {
+    const [a, b] = [...ptrs.values()];
+    return { c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], d: Math.hypot(a[0] - b[0], a[1] - b[1]), ang: Math.atan2(b[1] - a[1], b[0] - a[0]) };
+  };
+  const stopFollow = () => { if (follow) { follow = false; $('map-follow').classList.remove('on'); } };
+  mapView.addEventListener('contextmenu', (e) => e.preventDefault());
   mapView.addEventListener('pointerdown', (e) => {
     if (!mapOn) return;
-    if (mapTool() === 'pose') {
+    const p = local(e);
+    ptrs.set(e.pointerId, p);
+    try { mapView.setPointerCapture(e.pointerId); } catch (err) {}
+    e.preventDefault();
+    if (ptrs.size === 2) { drag = null; gesture = { type: 'two', ...two() }; drawMap(); return; }
+    const tool = mapTool();
+    if (e.button === 2) { gesture = { type: 'zoom', last: p }; return; }
+    if (e.button === 1 || e.shiftKey || (tool === 'view' && e.pointerType === 'touch')) { gesture = { type: 'pan', last: p }; return; }
+    if (tool === 'view') { gesture = { type: 'rot', last: p }; mapView.classList.add('rotating'); return; }
+    if (tool === 'pose') {
       if (!sys || sys.nav_mode !== 'nav') { $('map-status').textContent = 'ตั้งตำแหน่งรถได้เมื่อโหลดแผนที่เพื่อนำทางแล้ว (แท็บ ②)'; return; }
     } else if (state.control !== 'me' || state.estop) {
       $('map-status').textContent = state.estop ? 'ยกเลิก E-STOP ก่อน' : 'รับสิทธิ์ควบคุมก่อน แล้วคลิกบนแผนที่เพื่อตั้งเป้าหมาย';
       return;
     }
-    const p = mapFrac(e);
-    if (!p || p.u < 0 || p.u > 1 || p.v < 0 || p.v > 1) return;
-    e.preventDefault();
-    drag = { a: p, b: p };
-    mapView.setPointerCapture(e.pointerId);
-    drawDrag();
+    if (!gridHead) { $('map-status').textContent = 'ยังไม่มีแผนที่'; return; }
+    const w = s2w(...p);
+    drag = { a: w, b: w, tool }; gesture = { type: 'arrow' };
+    drawMap();
   });
   mapView.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    e.preventDefault();
-    const p = mapFrac(e); if (p) { drag.b = p; drawDrag(); }
+    if (!ptrs.has(e.pointerId)) return;
+    const p = local(e);
+    ptrs.set(e.pointerId, p);
+    if (!gesture) return;
+    if (gesture.type === 'two' && ptrs.size === 2) {
+      const t = two(), anchor = s2w(...gesture.c);
+      cam.s = Math.max(2, Math.min(2000, cam.s * t.d / Math.max(1, gesture.d)));
+      cam.a -= t.ang - gesture.ang;
+      const now = s2w(...t.c);
+      cam.cx += anchor[0] - now[0]; cam.cy += anchor[1] - now[1];
+      stopFollow(); Object.assign(gesture, t);
+    } else if (gesture.type === 'pan') {
+      const a = s2w(...gesture.last), b = s2w(...p);
+      cam.cx += a[0] - b[0]; cam.cy += a[1] - b[1]; gesture.last = p; stopFollow();
+    } else if (gesture.type === 'rot') {               // RViz: turn the view around its centre
+      const W = mapView.clientWidth / 2, H = mapView.clientHeight / 2;
+      const d = Math.atan2(p[1] - H, p[0] - W) - Math.atan2(gesture.last[1] - H, gesture.last[0] - W);
+      cam.a -= Math.atan2(Math.sin(d), Math.cos(d)); gesture.last = p;
+    } else if (gesture.type === 'zoom') {              // RViz: right-drag up = zoom in
+      zoomView(Math.exp(-(p[1] - gesture.last[1]) * 0.01)); gesture.last = p;
+    } else if (gesture.type === 'arrow' && drag) {
+      drag.b = s2w(...p);
+    }
+    drawMap();
   });
-  mapView.addEventListener('dragstart', (e) => e.preventDefault());
-  mapView.addEventListener('pointerup', (e) => {
-    if (!drag) return;
-    const end = mapFrac(e); if (end) drag.b = end;
-    const { a, b } = drag; drag = null; drawDrag();
-    if (mapTool() === 'pose') {
-      send({ type: 'nav_initial_pose', u0: a.u, v0: a.v, u1: b.u, v1: b.v });
+  const endMapPointer = (e, cancel) => {
+    ptrs.delete(e.pointerId);
+    mapView.classList.remove('rotating');
+    const g = gesture;
+    if (ptrs.size === 0) gesture = null; else if (g && g.type === 'two') gesture = null;   // one finger left: no jump
+    if (!g || g.type !== 'arrow' || !drag) return;
+    const { a, b, tool } = drag; drag = null; drawMap();
+    if (cancel) return;
+    if (tool === 'pose') {
+      send({ type: 'nav_initial_pose', x0: a[0], y0: a[1], x1: b[0], y1: b[1] });
       $('map-status').textContent = sys && sys.nav_method === 'vslam'
         ? 'ตั้งตำแหน่งรถแล้ว (RTAB-Map จะปรับให้ตรงกับภาพที่เห็น)' : 'ตั้งตำแหน่งรถแล้ว (AMCL จะปรับให้ตรงกับ lidar)';
-      return;
+    } else {
+      send({ type: 'nav_goal', x0: a[0], y0: a[1], x1: b[0], y1: b[1] });
+      $('map-status').textContent = 'ส่งเป้าหมายแล้ว';
     }
-    send({ type: 'nav_goal', u0: a.u, v0: a.v, u1: b.u, v1: b.v });
-    $('map-status').textContent = 'ส่งเป้าหมายแล้ว';
-  });
-  mapView.addEventListener('pointercancel', () => { drag = null; drawDrag(); });
+  };
+  mapView.addEventListener('pointerup', (e) => endMapPointer(e, false));
+  mapView.addEventListener('pointercancel', (e) => endMapPointer(e, true));
+  mapView.addEventListener('wheel', (e) => {
+    if (!mapOn) return;
+    e.preventDefault();
+    const p = local(e);
+    zoomView(Math.exp(-e.deltaY * 0.0015), p[0], p[1]);
+  }, { passive: false });
+  mapView.addEventListener('dblclick', () => { if (mapTool() === 'view') { follow = false; $('map-follow').classList.remove('on'); fitMap(); drawMap(); } });
+  // The 3D view (its own script block below) reads the 2D map data through this.
+  window.qcarMap = {
+    get: () => ({ head: gridHead, raw: gridRaw, canvas: gridCanvas, serial: gridSerial, state: mst, on: mapOn }),
+    ensureOn: () => { if (!mapOn) setMap(true); },
+  };
 
   $('btn-nav-cancel').onclick = () => send({ type: 'nav', on: false });
   $('nav-cancel2').onclick = () => send({ type: 'nav', on: false });
@@ -1198,7 +1745,7 @@
                              body: JSON.stringify({ name: $('map-name').value, overwrite: !!overwrite }) })
       .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(new Error(t))))
       .then(res => {
-        $('map-status').textContent = (res.warning ? '⚠ ' + res.warning + ' · ' : 'บันทึกแล้ว: ') + res.files.join(', ');
+        $('map-status').textContent = (res.warning ? 'คำเตือน: ' + res.warning + ' · ' : 'บันทึกแล้ว: ') + res.files.join(', ');
         $('map-name').value = '';
         loadMaps();
       })
@@ -1468,7 +2015,7 @@
     }
     reset.onclick = () => { set(p.default); edit(g, p, p.default); commitKey(true); };
     const help = document.createElement('div'); help.className = 'prm-help'; help.textContent = p.desc + (p.unit && p.kind !== 'enum' ? '' : '');
-    const tip = document.createElement('div'); tip.className = 'prm-tip'; tip.textContent = '💡 ' + p.tip;
+    const tip = document.createElement('div'); tip.className = 'prm-tip'; tip.textContent = p.tip;
     const stateEl = document.createElement('div'); stateEl.className = 'prm-state';
     row.append(head, ctl, help, tip, stateEl);
     rowUi[p.key] = { row, meta, set, get, stateEl, p };
@@ -1496,8 +2043,9 @@
   function setStateMark(key, text, cls) {
     const ui = rowUi[key];
     if (!ui) return;
+    const mark = ui.stateEl._mark = {};   // (the shown text may be translated)
     ui.stateEl.textContent = text; ui.stateEl.className = 'prm-state keep ' + cls;
-    setTimeout(() => { if (ui.stateEl.textContent === text) { ui.stateEl.textContent = ''; ui.stateEl.className = 'prm-state'; } }, 6000);
+    setTimeout(() => { if (ui.stateEl._mark === mark) { ui.stateEl.textContent = ''; ui.stateEl.className = 'prm-state'; } }, 6000);
   }
 
   function postTuning(g, body, keys, okText) {
@@ -1585,29 +2133,14 @@
   loadMaps();
   loadTuning();
 
-  // ---------------------------------------------------------- websocket
-  function connect() {
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/ws`);
-    ws.onopen = () => setChip('chip-conn', 'เชื่อมต่อแล้ว', 'ok');
-    ws.onclose = () => {
-      setChip('chip-conn', 'การเชื่อมต่อหลุด', 'bad');
-      state = { control: 'none', estop: state.estop };
-      renderControl();
-      setTimeout(connect, 1000);
-    };
-    ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
+  // ---------------------------------------------------------- websocket (robot_web_ui connect)
+  const { send } = RobotUI.connect('/ws', {
+    onclose: () => { state = { control: 'none', estop: state.estop }; renderControl(); },
+    onmessage: (msg) => {
       if (msg.type === 'status') { state = msg; renderStatus(msg); }
       else if (msg.type === 'nav_error') $('map-status').textContent = 'ผิดพลาด: ' + msg.text;
-    };
-  }
-  const send = (obj) => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); };
-  connect();
-
-  function setChip(id, text, cls) {
-    const c = $(id); c.textContent = text; c.className = 'chip' + (cls ? ' ' + cls : '');
-  }
+    },
+  });
 
   function renderControl() {
     const me = state.control === 'me';
@@ -1648,6 +2181,7 @@
     const speedCmd = s.output ? s.output.speed_mps : 0;
     const rev = speedCmd < -0.01 ? true : (speedCmd > 0.01 || !s.output) ? false : reversing;
     if (rev !== reversing) { reversing = rev; updateSide(); }
+    renderDash(s);
     if (s.output) {
       $('out-steer').textContent = s.output.steer_rad.toFixed(2) + ' rad';
       $('out-speed').textContent = s.output.speed_mps.toFixed(2) + ' m/s';
@@ -1706,17 +2240,60 @@
   const LED_PRESETS = [['แดง', '#ff0000'], ['ส้ม', '#ff6000'], ['เหลือง', '#ffd000'], ['เขียว', '#00ff00'],
                        ['ฟ้า', '#00ffff'], ['น้ำเงิน', '#0000ff'], ['ม่วง', '#b000ff'], ['ชมพู', '#ff2080'], ['ขาว', '#ffffff']];
   const hex2 = v => v.toString(16).padStart(2, '0');
-  let ledTimer = null;
+  let ledTimer = null, ledFx = 'none';
+  const FX_TH = { none: 'สีเดียว', rainbow: 'รุ้งวิ่ง', cycle: 'รุ้งเปลี่ยนสี', chase: 'ไฟวิ่ง', breathe: 'หายใจ' };
+  function setFx(fx) {
+    ledFx = fx;
+    document.querySelectorAll('#led-fx button').forEach(b => b.classList.toggle('on', b.dataset.fx === fx));
+    $('led-speed-row').hidden = fx === 'none';
+  }
   function ledSend() {
     clearTimeout(ledTimer);
     ledTimer = setTimeout(() => {
-      const h = $('led-color').value, b = +$('led-bright').value;
+      const h = $('led-color').value, b = +$('led-bright').value, sp = +$('led-speed').value;
       fetch('/api/led', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16),
-                               b: parseInt(h.slice(5, 7), 16), brightness: b }) })
-        .then(r => { $('led-status').textContent = r.ok ? `ตั้งสี ${h} ความสว่าง ${b}% แล้ว (ไฟเปลี่ยนภายใน ~0.5 วินาที ต้องเปิด ROS อยู่)` : 'ตั้งสีไม่ได้'; });
+                               b: parseInt(h.slice(5, 7), 16), brightness: b, effect: ledFx, speed: sp }) })
+        .then(r => r.ok ? ($('led-status').textContent = ledFx === 'none'
+            ? `ตั้งสี ${h} ความสว่าง ${b}% แล้ว (ไฟเปลี่ยนภายใน ~0.5 วินาที ต้องเปิด ROS อยู่)`
+            : `เปิดเอฟเฟกต์ "${FX_TH[ledFx]}" ความเร็ว ${sp.toFixed(1)}× ความสว่าง ${b}% แล้ว (ต้องเปิด ROS อยู่)`)
+          : r.text().then(t => { $('led-status').textContent = 'ตั้งไฟไม่ได้: ' + t; }));
     }, 300);
   }
+  document.querySelectorAll('#led-fx button').forEach(b => b.onclick = () => {
+    setFx(b.dataset.fx);
+    if (+$('led-bright').value === 0) { $('led-bright').value = 100; $('led-bright-val').textContent = '100%'; }
+    ledSend(); b.blur();
+  });
+  $('led-speed').oninput = () => { $('led-speed-val').textContent = (+$('led-speed').value).toFixed(1) + '×'; ledSend(); };
+  // preview of the strip, the same formulas as qcar2_hardware's led_effect_timer
+  (() => {
+    const cv = $('led-preview'), N = 33, t0 = performance.now();
+    const hsv = (h, v) => { h -= Math.floor(h); const x = h * 6, k = Math.floor(x) % 6, f = x - Math.floor(x);
+      const c = [[1, f, 0], [1 - f, 1, 0], [0, 1, f], [0, 1 - f, 1], [f, 0, 1], [1, 0, 1 - f]][k];
+      return c.map(u => Math.round(u * v * 255)); };
+    function frame() {
+      requestAnimationFrame(frame);
+      if (!cv.getClientRects().length) return;
+      const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+      if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+      const g = cv.getContext('2d'), w = cv.width / N, h = $('led-color').value;
+      const rgb = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)), br = +$('led-bright').value / 100;
+      const t = (performance.now() - t0) / 1000 * +$('led-speed').value;
+      g.clearRect(0, 0, cv.width, cv.height);
+      for (let i = 0; i < N; i++) {
+        let c;
+        if (ledFx === 'rainbow') c = hsv(i / N - 0.5 * t, br);
+        else if (ledFx === 'cycle') c = hsv(0.2 * t, br);
+        else if (ledFx === 'chase') { const head = (0.5 * t % 1) * N, d = (head - i + N) % N; c = rgb.map(v => v * br * Math.max(0, 1 - d / 6)); }
+        else if (ledFx === 'breathe') c = rgb.map(v => v * br * (0.08 + 0.92 * (0.5 - 0.5 * Math.cos(Math.PI * t))));
+        else c = rgb.map(v => v * br);
+        g.fillStyle = `rgb(${c.map(Math.round).join(',')})`;
+        g.beginPath(); g.arc((i + 0.5) * w, cv.height / 2, Math.min(w, cv.height) * 0.38, 0, 7); g.fill();
+      }
+    }
+    requestAnimationFrame(frame);
+  })();
   LED_PRESETS.forEach(([name, c]) => {
     const b = document.createElement('button');
     b.title = name; b.style.background = c;
@@ -1733,8 +2310,10 @@
     if (l && l.r !== undefined) {
       $('led-color').value = '#' + hex2(l.r) + hex2(l.g) + hex2(l.b);
       $('led-bright').value = l.brightness; $('led-bright-val').textContent = l.brightness + '%';
+      $('led-speed').value = l.speed || 1; $('led-speed-val').textContent = (+(l.speed || 1)).toFixed(1) + '×';
     }
-  }).catch(() => {});
+    setFx(l && l.effect ? l.effect : 'none');
+  }).catch(() => setFx('none'));
 
   // ---------------------------------------------------------- buttons
   $('btn-take').onclick = () => send({ type: 'take' });
@@ -1755,42 +2334,11 @@
   }
   speed.oninput = updateSpeedHint;
 
-  // ---------------------------------------------------------- keyboard
-  const KEYMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down',
-                   KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
-  window.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    if (e.code === 'Space') { e.preventDefault(); send({ type: 'estop' }); return; }
-    const k = KEYMAP[e.code];
-    if (k) { e.preventDefault(); keys.add(k); }
-  });
-  window.addEventListener('keyup', (e) => { const k = KEYMAP[e.code]; if (k) keys.delete(k); });
-  const clearInputs = () => { keys.clear(); resetPad(); };
-  window.addEventListener('blur', clearInputs);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) clearInputs(); });
-
-  // ---------------------------------------------------------- joystick
-  const padEl = $('pad'), knob = $('knob');
-  function moveKnob(x, y) {
-    const r = padEl.clientWidth / 2 - 32;
-    knob.style.transform = `translate(${x * r}px, ${-y * r}px)`;
-  }
-  function resetPad() { pad = { active: false, x: 0, y: 0 }; moveKnob(0, 0); }
-  function padFromEvent(e) {
-    const rect = padEl.getBoundingClientRect();
-    const r = rect.width / 2;
-    let x = (e.clientX - rect.left - r) / r;
-    let y = -(e.clientY - rect.top - r) / r;
-    const len = Math.hypot(x, y);
-    if (len > 1) { x /= len; y /= len; }
-    pad.x = x; pad.y = y; moveKnob(x, y);
-  }
-  padEl.addEventListener('pointerdown', (e) => {
-    if (state.control !== 'me') return;
-    pad.active = true; padEl.setPointerCapture(e.pointerId); padFromEvent(e);
-  });
-  padEl.addEventListener('pointermove', (e) => { if (pad.active) padFromEvent(e); });
-  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => padEl.addEventListener(t, resetPad));
+  // ---------------------------------------------------------- keyboard + joystick (robot_web_ui)
+  // Learn page: A/D/S/arrows label images there, they must not drive the car. Space stays E-STOP.
+  const keys = RobotUI.driveKeys({ onEstop: () => send({ type: 'estop' }),
+                                   skip: () => document.body.dataset.page === 'learn' });
+  const pad = RobotUI.joystick($('pad'), $('knob'), () => state.control === 'me');
 
   // ---------------------------------------------------------- drive loop (20 Hz, also the watchdog heartbeat)
   setInterval(() => {
@@ -1824,7 +2372,8 @@
     let used = 0, head = 0, dirty = true;
     let car = { x: 0, y: 0, yaw: 0, known: false };
     const trail = [];
-    let colorMode = 0, size = 3, follow = true, accumulate = true, lastCloud = 0, gotAny = false, nClouds = 0, tFps = performance.now();
+    let colorMode = 0, size = 3, follow = true, accumulate = false, lastCloud = 0, gotAny = false, nClouds = 0, tFps = performance.now();
+    let showWalls = true, showMap3d = true;
 
     function shader(type, src) {
       const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -1851,6 +2400,131 @@
       lp: gl.getAttribLocation(lnProg, 'p'), lmvp: gl.getUniformLocation(lnProg, 'mvp'), lcolor: gl.getUniformLocation(lnProg, 'color'),
     };
     const posBuf = gl.createBuffer(), colBuf = gl.createBuffer(), lineBuf = gl.createBuffer();
+    // Walls raised from the 2D map (shaded triangles) and the 2D map itself as the floor (texture).
+    const wallProg = program(`
+      attribute vec3 p; attribute vec3 n; uniform mat4 mvp; varying float l;
+      void main() { gl_Position = mvp * vec4(p, 1.0); l = 0.45 + 0.55 * max(dot(n, normalize(vec3(0.35, 0.55, 0.8))), 0.0); }`,
+      'precision mediump float; varying float l; void main() { gl_FragColor = vec4(vec3(0.72, 0.76, 0.82) * l, 1.0); }');
+    const floorProg = program(`
+      attribute vec3 p; attribute vec2 t; uniform mat4 mvp; varying vec2 vt; void main() { gl_Position = mvp * vec4(p, 1.0); vt = t; }`,
+      'precision mediump float; uniform sampler2D tex; varying vec2 vt; void main() { gl_FragColor = vec4(texture2D(tex, vt).rgb * 0.75, 1.0); }');
+    const wl = { p: gl.getAttribLocation(wallProg, 'p'), n: gl.getAttribLocation(wallProg, 'n'), mvp: gl.getUniformLocation(wallProg, 'mvp') };
+    const fl = { p: gl.getAttribLocation(floorProg, 'p'), t: gl.getAttribLocation(floorProg, 't'), mvp: gl.getUniformLocation(floorProg, 'mvp'), tex: gl.getUniformLocation(floorProg, 'tex') };
+    const wallBuf = gl.createBuffer(), floorBuf = gl.createBuffer(), floorTex = gl.createTexture();
+    const mapPosBuf = gl.createBuffer(), mapColBuf = gl.createBuffer();
+    const WALL_H = 0.45;
+    let wallSerial = -1, wallVerts = 0, floorOk = false;
+    function buildWalls() {
+      const M = window.qcarMap.get();
+      wallSerial = M.serial;
+      const hd = M.head, raw = M.raw, gridCanvas = M.canvas;
+      floorOk = false; wallVerts = 0;
+      if (!hd || !raw || !gridCanvas) return;
+      const W = hd.w, H = hd.h, r = hd.res, occ = (i, j) => i >= 0 && j >= 0 && i < H && j < W && raw[i * W + j] !== 255 && raw[i * W + j] >= 65;
+      const v = [];
+      const quad = (a, b, c, d, n) => { for (const q of [a, b, c, a, c, d]) v.push(q[0], q[1], q[2], n[0], n[1], n[2]); };
+      for (let i = 0; i < H; i++) for (let j = 0; j < W; j++) {
+        if (!occ(i, j)) continue;
+        const x0 = hd.ox + j * r, x1 = x0 + r, y0 = hd.oy + i * r, y1 = y0 + r, h = WALL_H;
+        quad([x0, y0, h], [x1, y0, h], [x1, y1, h], [x0, y1, h], [0, 0, 1]);
+        if (!occ(i - 1, j)) quad([x0, y0, 0], [x1, y0, 0], [x1, y0, h], [x0, y0, h], [0, -1, 0]);
+        if (!occ(i + 1, j)) quad([x1, y1, 0], [x0, y1, 0], [x0, y1, h], [x1, y1, h], [0, 1, 0]);
+        if (!occ(i, j - 1)) quad([x0, y1, 0], [x0, y0, 0], [x0, y0, h], [x0, y1, h], [-1, 0, 0]);
+        if (!occ(i, j + 1)) quad([x1, y0, 0], [x1, y1, 0], [x1, y1, h], [x1, y0, h], [1, 0, 0]);
+      }
+      gl.bindBuffer(gl.ARRAY_BUFFER, wallBuf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+      wallVerts = v.length / 6;
+      const X0 = hd.ox, Y0 = hd.oy, X1 = hd.ox + W * r, Y1 = hd.oy + H * r, z = -0.003;
+      gl.bindBuffer(gl.ARRAY_BUFFER, floorBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([X0, Y0, z, 0, 0, X1, Y0, z, 1, 0, X1, Y1, z, 1, 1, X0, Y0, z, 0, 0, X1, Y1, z, 1, 1, X0, Y1, z, 0, 1]), gl.STATIC_DRAW);
+      gl.bindTexture(gl.TEXTURE_2D, floorTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, gridCanvas);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      floorOk = true;
+    }
+    function drawWalls() {
+      if (window.qcarMap.get().serial !== wallSerial) buildWalls();
+      if (floorOk) {
+        gl.useProgram(floorProg); gl.uniformMatrix4fv(fl.mvp, false, vp);
+        gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, floorTex); gl.uniform1i(fl.tex, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, floorBuf);
+        gl.enableVertexAttribArray(fl.p); gl.vertexAttribPointer(fl.p, 3, gl.FLOAT, false, 20, 0);
+        gl.enableVertexAttribArray(fl.t); gl.vertexAttribPointer(fl.t, 2, gl.FLOAT, false, 20, 12);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.disableVertexAttribArray(fl.t);
+      }
+      if (wallVerts) {
+        gl.useProgram(wallProg); gl.uniformMatrix4fv(wl.mvp, false, vp);
+        gl.bindBuffer(gl.ARRAY_BUFFER, wallBuf);
+        gl.enableVertexAttribArray(wl.p); gl.vertexAttribPointer(wl.p, 3, gl.FLOAT, false, 24, 0);
+        gl.enableVertexAttribArray(wl.n); gl.vertexAttribPointer(wl.n, 3, gl.FLOAT, false, 24, 12);
+        gl.drawArrays(gl.TRIANGLES, 0, wallVerts);
+        gl.disableVertexAttribArray(wl.n);
+      }
+    }
+
+    // RTAB-Map's 3D map (/ws/map3d): one cloud per node in the node's frame + the node poses.
+    const m3 = { nodes: new Map(), poses: {}, pos: null, col: null, used: 0, dirty: false, gpu: false, last: 0, status: null };
+    let m3sock = null, m3retry = null;
+    function m3open() {
+      const s = m3sock = new WebSocket(`${wsProto}://${location.host}/ws/map3d`);
+      s.binaryType = 'arraybuffer';
+      s.onmessage = ev => {
+        if (m3sock !== s) return;
+        if (typeof ev.data === 'string') {
+          const m = JSON.parse(ev.data);
+          if (m.type === 'reset') { m3.nodes.clear(); m3.poses = {}; m3.dirty = true; }
+          else if (m.type === 'poses') { m3.poses = m.poses; m3.dirty = true; }
+          else if (m.type === 'status') m3.status = m;
+          return;
+        }
+        const dv = new DataView(ev.data), id = dv.getInt32(4, true), n = dv.getUint32(8, true);
+        const mm = new Int16Array(ev.data, 12, n * 3), pts = new Float32Array(n * 3);
+        for (let i = 0; i < n * 3; i++) pts[i] = mm[i] / 1000;
+        m3.nodes.set(String(id), { n, pts, col: new Uint8Array(ev.data, 12 + n * 6, n * 3).slice() });
+        m3.dirty = true;
+      };
+      s.onclose = () => { if (m3sock !== s) return; m3sock = null; if (on) m3retry = setTimeout(m3open, 2000); };
+    }
+    function m3close() { clearTimeout(m3retry); if (m3sock) { const s = m3sock; m3sock = null; s.onclose = s.onmessage = null; s.close(); } }
+    function m3rebuild() {   // place every node cloud with its newest pose (a loop closure moves them all)
+      m3.dirty = false; m3.last = performance.now();
+      let total = 0;
+      m3.nodes.forEach((nd, id) => { if (m3.poses[id]) total += nd.n; });
+      if (!m3.pos || m3.pos.length < total * 3) { m3.pos = new Float32Array(Math.ceil(total * 1.3) * 3 + 3); m3.col = new Uint8Array(m3.pos.length); }
+      let k = 0;
+      m3.nodes.forEach((nd, id) => {
+        const q = m3.poses[id]; if (!q) return;
+        const [x, y, z, qx, qy, qz, qw] = q;
+        const r00 = 1 - 2 * (qy * qy + qz * qz), r01 = 2 * (qx * qy - qz * qw), r02 = 2 * (qx * qz + qy * qw);
+        const r10 = 2 * (qx * qy + qz * qw), r11 = 1 - 2 * (qx * qx + qz * qz), r12 = 2 * (qy * qz - qx * qw);
+        const r20 = 2 * (qx * qz - qy * qw), r21 = 2 * (qy * qz + qx * qw), r22 = 1 - 2 * (qx * qx + qy * qy);
+        const P = nd.pts, out = m3.pos;
+        for (let i = 0; i < nd.n; i++) {
+          const a = P[i * 3], b = P[i * 3 + 1], c = P[i * 3 + 2], o = (k + i) * 3;
+          out[o] = r00 * a + r01 * b + r02 * c + x; out[o + 1] = r10 * a + r11 * b + r12 * c + y; out[o + 2] = r20 * a + r21 * b + r22 * c + z;
+        }
+        m3.col.set(nd.col, k * 3); k += nd.n;
+      });
+      m3.used = k; m3.gpu = true;
+    }
+    function drawMap3d(d) {
+      if (m3.dirty && performance.now() - m3.last > 300) m3rebuild();
+      if (!m3.used) return;
+      if (m3.gpu) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, mapPosBuf); gl.bufferData(gl.ARRAY_BUFFER, m3.pos.subarray(0, m3.used * 3), gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, mapColBuf); gl.bufferData(gl.ARRAY_BUFFER, m3.col.subarray(0, m3.used * 3), gl.STATIC_DRAW);
+        m3.gpu = false;
+      }
+      gl.useProgram(ptProg); gl.uniformMatrix4fv(loc.mvp, false, vp);
+      gl.uniform1f(loc.size, Math.max(1, size - 1) * d); gl.uniform1f(loc.mode, colorMode);
+      gl.bindBuffer(gl.ARRAY_BUFFER, mapPosBuf); gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, mapColBuf); gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.UNSIGNED_BYTE, true, 0, 0);
+      gl.drawArrays(gl.POINTS, 0, m3.used);
+      gl.disableVertexAttribArray(loc.c);
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.bufferData(gl.ARRAY_BUFFER, pos.byteLength, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, colBuf); gl.bufferData(gl.ARRAY_BUFFER, col.byteLength, gl.DYNAMIC_DRAW);
 
@@ -1906,12 +2580,16 @@
       if (canvas.width !== Math.round(w * d) || canvas.height !== Math.round(h * d)) { canvas.width = Math.round(w * d); canvas.height = Math.round(h * d); }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(0.043, 0.055, 0.07, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); gl.enable(gl.DEPTH_TEST);
+      const mst = window.qcarMap.get().state;
+      if (mst && mst.pose && performance.now() - lastCloud > 1000) car = { x: mst.pose[0], y: mst.pose[1], yaw: mst.pose[2], known: true };
       if (follow && car.known) { cam.tx += (car.x - cam.tx) * 0.2; cam.ty += (car.y - cam.ty) * 0.2; }
       vp = viewProj();
       drawLines(grid(), [0.25, 0.3, 0.36, 1], gl.LINES);
       drawLines(new Float32Array([0, 0, 0, 1, 0, 0]), [1, 0.3, 0.3, 1], gl.LINES);
       drawLines(new Float32Array([0, 0, 0, 0, 1, 0]), [0.3, 1, 0.3, 1], gl.LINES);
       drawLines(new Float32Array([0, 0, 0, 0, 0, 1]), [0.4, 0.5, 1, 1], gl.LINES);
+      if (showWalls) drawWalls();
+      if (showMap3d) drawMap3d(d);
       if (used) {
         if (dirty) {
           gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos.subarray(0, used * 3));
@@ -1922,6 +2600,7 @@
         gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, colBuf); gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.UNSIGNED_BYTE, true, 0, 0);
         gl.drawArrays(gl.POINTS, 0, used);
+        gl.disableVertexAttribArray(loc.c);
       }
       if (trail.length > 1) drawLines(new Float32Array(trail.flatMap(t => [t[0], t[1], 0.02])), [1, 0.8, 0.2, 1], gl.LINE_STRIP);
       if (car.known) drawLines(carBox(), [0.3, 0.75, 1, 1], gl.LINES);
@@ -1967,20 +2646,32 @@
       on = v; el('cloud-toggle').textContent = on ? 'ปิด' : 'เปิด'; el('cloud-toggle').classList.toggle('on', on);
       clearTimeout(retry);
       if (sock) { sock.onclose = null; sock.close(); sock = null; }
-      if (on) { gotAny = false; open(); } else { msgEl.textContent = 'ปิดอยู่'; statsEl.textContent = '–'; }
+      m3close();
+      if (on) {
+        gotAny = false; open(); m3open();
+        window.qcarMap.ensureOn();    // walls/floor/car pose come from the 2D map feed
+      } else { msgEl.textContent = 'ปิดอยู่'; statsEl.textContent = '–'; }
     }
     el('cloud-toggle').onclick = () => setOn(!on);
     setInterval(() => {
       if (!on) return;
       const now = performance.now(), fresh = now - lastCloud < 2500;
-      msgEl.textContent = fresh ? '' : (gotAny ? 'ไม่มีภาพใหม่จากกล้อง (V-SLAM หยุดอยู่หรือเปล่า?)'
-        : 'รอภาพจากกล้อง… ต้องเริ่ม "ทำแผนที่แบบ V-SLAM" ก่อน (โหมด Lidar ไม่มีภาพ 3D)');
+      const haveWalls = showWalls && wallVerts > 0, haveMap3d = showMap3d && m3.used > 0;
+      msgEl.textContent = (fresh || haveWalls || haveMap3d) ? ''
+        : 'ยังไม่มีอะไรให้แสดง · เริ่มทำแผนที่ (Lidar = ผนังจากแผนที่ 2D, V-SLAM = แผนที่ 3D สี) หรือโหลดแผนที่ที่บันทึกไว้';
       const fps = nClouds / ((now - tFps) / 1000); nClouds = 0; tFps = now;
-      statsEl.textContent = `${used.toLocaleString()} จุด · ${fps.toFixed(1)} เฟรม/วินาที` + (car.known || !gotAny ? '' : ' · ยังไม่รู้ตำแหน่งรถบนแผนที่ (แสดงเฉพาะภาพสด)');
+      const parts = [];
+      if (m3.nodes.size) parts.push(`แผนที่ 3D ${m3.nodes.size} ภาพ · ${m3.used.toLocaleString()} จุด`);
+      else if (m3.status && !m3.status.receiving) parts.push('แผนที่ 3D: RTAB-Map ไม่ทำงาน (ใช้เมื่อทำแผนที่/นำทางแบบ V-SLAM)');
+      if (wallVerts) parts.push('ผนังจากแผนที่ 2D');
+      if (fresh) parts.push(`ภาพสด ${fps.toFixed(1)} เฟรม/วินาที`);
+      statsEl.textContent = parts.join(' · ') || '–';
     }, 1000);
 
     // ---- controls
-    el('cloud-acc').onchange = e => { accumulate = e.target.checked; };
+    el('cloud-acc').onchange = e => { accumulate = e.target.checked; if (!accumulate) { used = 0; head = 0; index.clear(); slotKey.fill(-1); dirty = true; } };
+    el('cloud-walls').onchange = e => { showWalls = e.target.checked; };
+    el('cloud-map3d').onchange = e => { showMap3d = e.target.checked; };
     el('cloud-follow').onchange = e => { follow = e.target.checked; };
     el('cloud-size').oninput = e => { size = parseFloat(e.target.value); };
     el('cloud-clear').onclick = clearAll;
@@ -2016,5 +2707,6 @@
     canvas.addEventListener('dblclick', () => { el('cloud-follow').checked = follow = true; setView('iso'); });
   })();
 </script>
+<script src="/static/learn.js"></script>
 </body>
 </html>

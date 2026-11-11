@@ -38,7 +38,7 @@ def generate_launch_description():
         DeclareLaunchArgument('port', default_value='8080'),
         DeclareLaunchArgument('password', default_value='',
                               description='Empty = no password (anyone on the LAN can drive)'),
-        DeclareLaunchArgument('max_speed', default_value='0.5', description='m/s at 100%'),
+        DeclareLaunchArgument('max_speed', default_value='1.5', description='m/s at 100%'),
         DeclareLaunchArgument('max_steer', default_value='0.5', description='rad, capped at 0.6'),
         DeclareLaunchArgument('invert_steering', default_value='false'),
         DeclareLaunchArgument('stream_max_width', default_value='640',
