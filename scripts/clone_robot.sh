@@ -11,6 +11,8 @@
 #
 # Layout expected in the repo:  src/<robot>/<package>...   (+ optional src/common)
 # Add more robots later by just creating src/<robot>/ -- no change needed here.
+# If a checked-out package needs robot_web_ui (its own repo), it is cloned into
+# src/common/robot_web_ui by scripts/get_robot_web_ui.sh (env ROBOT_WEB_UI_URL / _REF).
 set -euo pipefail
 
 REPO_URL="${QUANSER_ROS2_URL:-https://github.com/ENTECH-Industrial-Solution/quanser_ros2.git}"
@@ -71,6 +73,11 @@ done
 
 git sparse-checkout set "${paths[@]}"
 git checkout -q
+
+# Shared web UI lives in its own repo; get it when a robot's package depends on it.
+if grep -lqs '<exec_depend>robot_web_ui</exec_depend>' $(find src -name package.xml); then
+  bash scripts/get_robot_web_ui.sh "$PWD"
+fi
 
 echo
 echo "Checked out: ${paths[*]}"
