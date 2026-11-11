@@ -1,0 +1,19 @@
+/* robot_web_ui theme: every colour and the font of the page. A robot that wants its own look
+   overrides these in its own stylesheet (loaded after this one), e.g.
+     :root { --accent: #ff7a1a; }
+   Keep the contrast: --text on --bg / --panel / --ctl must stay readable, white text sits on
+   --accent / --ok / --warn / --bad. */
+:root {
+  --bg: #0f1216;      /* page background */
+  --panel: #181d23;   /* header, windows, panels, dock */
+  --card: #1d232a;    /* cards inside a panel */
+  --ctl: #232a33;     /* buttons, inputs, selects */
+  --deep: #0b0e12;    /* behind 3D views and drawings */
+  --sel: #26354d;     /* selected dock tab, page-switch hint */
+  --line: #2a313a;    /* borders, dividers, joystick cross */
+  --text: #e6e9ee;
+  --muted: #8b95a3;   /* secondary text, labels, hints */
+  --accent: #3b8cff;  /* selected / primary / joystick knob */
+  --ok: #2fbf71; --warn: #f0a92b; --bad: #e5484d;   /* status; --bad is also E-STOP */
+  --font: system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", sans-serif;
+}

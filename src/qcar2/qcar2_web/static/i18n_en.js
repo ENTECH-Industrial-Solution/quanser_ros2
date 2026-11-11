@@ -1,5 +1,5 @@
 // Generated from i18n_en.tsv by i18n_build.py: Thai phrase -> English (used by i18n.js).
-window.QCAR_EN = {
+window.RUI_EN = {
 "ปรับกล้อง": "Calibrate cameras",
 "ขับ / รอบคัน": "Drive / Surround",
 "แผนที่ / นำทาง": "Map / Navigate",

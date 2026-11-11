@@ -1,5 +1,5 @@
 // "เรียนรู้" page: collect RealSense images, label boxes, train YOLO, use the trained detector.
-// Loaded after index.html's main script; uses window.qcarStreamView from it.
+// Loaded after index.html's main script; uses robot_web_ui's core.js (window.RobotUI).
 (() => {
   'use strict';
   const $ = (id) => document.getElementById(id);
@@ -731,7 +731,7 @@
   };
 
   // live view: plain camera or the trained detector
-  const liveView = window.qcarStreamView ? window.qcarStreamView($('learn-live')) : null;
+  const liveView = RobotUI.streamView($('learn-live'));
   let liveMode = 'cam', liveShown = null;
   try { liveMode = localStorage.getItem('qcar2.learn.live') || 'cam'; } catch (e) {}
   if (liveMode === 'realsense') liveMode = 'cam';
@@ -883,7 +883,7 @@
   $('learn-conf').onchange = (e) => api('/detect', { conf: +e.target.value }).catch(fail);
 
   // ------------------------------------------------------------ page on/off
-  addEventListener('qcar-page', (e) => {
+  addEventListener(RobotUI.PAGE_EVENT, (e) => {
     const was = on;
     on = e.detail.page === 'learn';
     if (on && !was) { poll(); setLive(liveMode); setTimeout(draw, 50); }

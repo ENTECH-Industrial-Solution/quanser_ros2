@@ -1,0 +1,299 @@
+/* QCar2 windows and pages, on top of robot_web_ui (/ui/theme.css, /ui/ui.css). */
+  .surround { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .surround { grid-template-columns: 1fr; } }
+  .surround .view.bev { aspect-ratio: 1 / 1; }
+  details.calib { margin-bottom: 16px; }
+  details.calib > summary { display: none; }          /* opened with "ปรับกล้อง" in the bird's-eye view */
+  details.calib:not([open]) { display: none; }
+  .calib-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .calib-head h2 { margin: 0; }
+  /* The preview stays on screen while scrolling through the sliders. */
+  .obs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .obs { grid-template-columns: 1fr; } }
+  .obs .view.top { aspect-ratio: 1 / 1; }
+  .obs .view.person { aspect-ratio: 16 / 9; }
+  .obs .sliders { grid-template-columns: 120px minmax(0, 1fr) 76px; }
+  .obs .view.map { aspect-ratio: 1 / 1; position: relative; touch-action: none; }
+  .view.map.pick { cursor: crosshair; }
+  .view.map.tool-view { cursor: grab; }
+  .view.map.rotating { cursor: grabbing; }
+  .view.map { overflow: hidden; }
+  .map-msg { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center;
+             color: #c9d1d9; pointer-events: none; padding: 0 16px; text-shadow: 0 1px 2px #000; }
+  .map-msg:empty { display: none; }
+  .map-zoom { align-items: center; }
+  .map-zoom span { min-width: 3.4em; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* Stop the browser's own image drag / text selection so click-and-drag sets the arrow. */
+  .view.map, .view.map img { user-select: none; -webkit-user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; }
+  .view.map img { pointer-events: none; }
+  .view.map canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .led-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .led-swatches button { width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--line); }
+  .led-fx button { font-size: 12px; padding: 4px 9px; }
+  .led-preview { width: 100%; height: 22px; display: block; border-radius: 6px; background: var(--deep); }
+  .led-swatches button.off { width: auto; border-radius: 14px; padding: 0 10px; font-size: 12px; }
+  /* ---------- Map / SLAM / Nav2 section ---------- */
+  .cloud-wrap { position: relative; aspect-ratio: 16 / 9; max-height: 75vh; background: var(--deep); }
+  .cloud-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; cursor: grab; }
+  .cloud-wrap canvas:active { cursor: grabbing; }
+  .cloud-msg { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center;
+               color: var(--muted); pointer-events: none; padding: 0 16px; }
+  .cloud-msg:empty { display: none; }
+  .cloud-bar { flex-wrap: wrap; gap: 8px 14px; padding: 8px 10px; align-items: center; }
+  .cloud-bar .row { display: inline-flex; gap: 6px; align-items: center; }
+  .mapx { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; margin-bottom: 16px; align-items: start; }
+  @media (max-width: 1100px) { .mapx { grid-template-columns: 1fr; } }
+  /* Right column: the tabs/parameters, then the 3D view under them. */
+  .mapx-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  /* Wide screens: two equal columns of one fixed height, top and bottom edges aligned. The
+     2D map fills the left column; on the right the parameter panel scrolls inside itself and
+     the 3D view takes the rest. Switching tabs therefore never resizes the map. */
+  @media (min-width: 1101px) {
+    .mapx { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch;
+            height: min(88vh, 900px); }
+    .mapx > .cam { display: flex; flex-direction: column; min-height: 0; }
+    .mapx > .cam > .view.map { flex: 1 1 auto; aspect-ratio: auto; max-height: none; min-height: 0; }
+    .mapx-side { min-height: 0; }
+    .mapx-side > .panel { flex: 0 1 auto; min-height: 0; overflow-y: auto; }
+    .mapx-side > .cloud3d { flex: 1 0 300px; display: flex; flex-direction: column; min-height: 0; }
+    .mapx-side > .cloud3d > .cloud-wrap { flex: 1 1 auto; aspect-ratio: auto; max-height: none; min-height: 0; }
+  }
+  .mapx .view.map { aspect-ratio: 1 / 1; position: relative; touch-action: none; max-height: 80vh; }
+  .map-bar { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 10px; }
+  .mapx .cam-head small { white-space: normal; }
+  .mapx .cam-head > div { min-width: 0; }
+  .mapx .cam > .hint { margin: 0; padding: 0 10px 8px; }
+  .mode-line { display: flex; gap: 8px 12px; flex-wrap: wrap; align-items: center; }
+  .method { margin-top: 10px; }
+  .method .seg { flex-wrap: nowrap; }
+  .method .seg button { flex: 1; text-align: left; line-height: 1.25; padding: 8px 10px; font-size: 13px; }
+  .method .seg button small { display: block; opacity: .75; font-size: 11px; }
+  .method .hint { margin: 6px 0 0; }
+  .map-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--card); }
+  .map-card.current { border-color: var(--ok); }
+  .map-card .meta { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
+  .map-card .title { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .map-card .row > button { padding: 5px 8px; font-size: 12.5px; }
+  .tune-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  details.sect { border-top: 1px solid var(--line); padding-top: 6px; }
+  details.sect > summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+  .prm { padding: 8px 0 8px 8px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+  .prm.custom { border-left-color: var(--accent); }
+  .prm.changed { border-left-color: var(--warn); }
+  .prm-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .prm-name { font-weight: 600; }
+  .prm-ctl { display: grid; grid-template-columns: minmax(0, 1fr) 84px 26px; gap: 8px; align-items: center; margin-top: 4px; }
+  .prm-ctl.simple { grid-template-columns: minmax(0, 1fr) 26px; }
+  .prm-ctl input[type=number], .prm-ctl select { width: 100%; font: inherit; color: var(--text); background: var(--ctl); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; text-align: right; }
+  .prm-ctl select { text-align: left; }
+  .prm-ctl .reset { padding: 0; min-height: 0; height: 26px; line-height: 1; border-radius: 6px; }
+  .prm-help { color: var(--muted); font-size: 12px; margin-top: 3px; }
+  .prm-tip { color: #a7c1e8; font-size: 12px; margin-top: 2px; display: none; }
+  .learn .prm-tip { display: block; }
+  .prm-state { font-size: 11px; margin-top: 2px; }
+  .prm-state.ok { color: var(--ok); } .prm-state.warn { color: var(--warn); } .prm-state.bad { color: var(--bad); }
+  /* ---------- Phone / narrow layout ---------- */
+  @media (max-width: 900px), (max-height: 520px) and (max-width: 1100px) {
+    .obs .sliders { grid-template-columns: 96px minmax(0, 1fr) 68px; }
+    .led-fx button { padding: 6px 12px; }   /* touch size, like every .seg button on a phone */
+  }
+  @media (max-height: 520px) and (max-width: 1100px) {
+    .cloud-wrap, .mapx .view.map { max-height: 78vh; }
+    .obs .view.map { max-height: 78vh; }
+  }
+  /* Phone: one page at a time */
+  @media (max-width: 700px), (max-height: 520px) and (max-width: 1100px) {
+    #sec-surround, #sec-map, #sec-cams { display: none; }
+    .surround { display: contents; }
+    .surround[hidden] { display: none; }
+    .surround > .cam:last-child { order: 1; }          /* camera first, then controls, then the bird's-eye view */
+    aside > [data-pg~="drive"] { order: 2; }
+    .surround > .cam:first-child { order: 3; }
+    aside > [data-pg~="auto"] { order: -1; }           /* start/stop buttons above the tuning sliders */
+    .calib { order: 4; }
+    .surround .view, .surround .view.bev { max-height: 38vh; }
+    .surround .view.bev { aspect-ratio: 16 / 10; }
+  }
+  /* Landscape phone, driving page: camera left, controls right, bird's-eye view below. */
+  @media (max-height: 520px) and (max-width: 1100px) {
+    body[data-page="drive"] main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  }
+  /* ---------- Tablet / computer (body.desk) ---------- */
+  body.desk #sec-surround, body.desk #sec-map, body.desk #sec-cams { display: none; }
+  body.desk section .cam > .cloud-wrap { flex: 1 1 auto; min-height: 120px; max-height: none; }
+  body.desk .surround .view, body.desk .obs .view, body.desk .mapx .view, body.desk .cloud-wrap { aspect-ratio: auto; }
+  body.desk main > section > :is(.surround, .obs, .mapx) { display: flex; gap: 0; align-items: stretch; }
+  body.desk main > section > .surround { flex: 1 0 auto; min-height: 420px; }
+  body.desk main > section > .obs { flex: 1 0 auto; min-height: 360px; }
+  body.desk main > section > .mapx { flex: 1 1 0; min-height: 560px; height: auto; }
+  body.desk .mapx > .cam > .view.map { min-height: 200px; }
+  body.desk .mapx-side { min-height: 0; gap: 0; }
+  body.desk .mapx-side > .panel { overflow-y: auto; }
+  body.desk .mapx-side > .cloud3d { display: flex; flex-direction: column; }
+  body.desk .obs > .panel { overflow-y: auto; }
+  /* Auto page: obstacle + person-follow share the screen top/bottom (no page scroll); drag the bar between them. */
+  body.desk main > section > .autox { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  body.desk .autox > .auto-pane { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  body.desk .auto-pane > h2 { flex: 0 0 auto; margin: 0 0 6px; font-size: 14px; }
+  body.desk .auto-pane > .obs { flex: 1 1 0; min-height: 0; margin: 0; display: flex; gap: 0; align-items: stretch; }
+  body.desk .auto-pane .obs > .cam > .view { min-height: 80px; }
+  /* Auto page: start buttons right under E-STOP, joystick below them. */
+  body.desk[data-page="auto"] main > aside { display: flex; flex-direction: column; }
+  body.desk[data-page="auto"] main > aside > :is(.side-bar, #btn-estop) { order: -2; }
+  body.desk[data-page="auto"] main > aside > [data-pg~="auto"] { order: -1; }
+
+  /* Learn page (object detection) */
+  .learnx { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 1100px) { .learnx { grid-template-columns: 1fr; } }
+  .learn-main, .learn-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; }
+  .learn-side h3 { margin: 0; font-size: 14px; }
+  .learn-lab { display: flex; flex-direction: column; }
+  #learn-canvas { display: block; width: 100%; aspect-ratio: 4 / 3; background: #000; touch-action: none; cursor: crosshair; }
+  .lcls-bar { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+  .lcls { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; font-size: 13px; }
+  .lcls i, .lcls-row i, .learn-objs i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; flex: 0 0 auto; }
+  .lcls kbd { font: 10px ui-monospace, monospace; color: var(--muted); }
+  .lcls.on kbd { color: #fff; }
+  .learn-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); }
+  .learn-tools button { padding: 5px 10px; font-size: 13px; }
+  #learn-prev, #learn-next { font-size: 18px; line-height: 1; padding: 3px 12px; }
+  .learn-only { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .learn-other { padding: 0 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .learn-other:empty { display: none; }
+  .learn-other button { font-size: 12px; padding: 3px 8px; }
+  .learn-keys { margin: 4px 10px 8px; }
+  .learn-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; padding: 8px; max-height: 280px; overflow-y: auto; }
+  .lthumb { position: relative; padding: 0; overflow: hidden; height: 92px; min-height: 0; background: #000; border-width: 2px; }
+  .lthumb.on, .lthumb.on:hover { border-color: var(--accent); background: #000; }
+  .learn-side > *, .learn-panels > * { flex: 0 0 auto; }
+  .learn-panels { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .lthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .lthumb span { position: absolute; left: 3px; bottom: 3px; font-size: 10px; padding: 1px 5px; border-radius: 4px; background: rgba(0,0,0,.75); }
+  .lthumb span.todo { color: var(--warn); } .lthumb span.review { color: #6fb7ff; }
+  .learn-mode-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  .learn-mode-row .seg button { font-size: 12px; padding: 4px 9px; }
+  #learn-brush-opts { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  #learn-brush-opts[hidden], #learn-brush-opts [hidden] { display: none; }
+  #learn-brush-opts label { display: inline-flex; align-items: center; gap: 4px; }
+  #learn-brush-opts input[type=range] { width: 90px; }
+  #learn-brush-opts button { font-size: 12px; padding: 3px 8px; }
+  #learn-tool-hint { flex: 1 1 200px; min-width: 0; }
+  .learn-helper-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 0 10px 6px; }
+  .learn-helper-row button, .learn-helper-row select { font-size: 12px; padding: 3px 8px; }
+  #learn-helper-model { max-width: 330px; } .lthumb span.ok { color: var(--ok); } .lthumb span.empty { color: var(--muted); }
+  .lthumb b { position: absolute; right: 3px; top: 3px; font-size: 10px; padding: 0 4px; border-radius: 3px; background: rgba(59,140,255,.85); }
+  .lcls-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+  .lcls-row span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .lcls-row small { color: var(--muted); }
+  .lcls-row button { font-size: 11px; padding: 2px 7px; }
+  .learn-live { aspect-ratio: 4 / 3; }
+  .learn-live img { width: 100%; height: 100%; object-fit: contain; }
+  .learn-cams { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 8px 10px 0; font-size: 13px; }
+  .lcamchk { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+  .lcamchk i { font-style: normal; font-size: 11px; width: 10px; }
+  .lcamchk i.ok { color: var(--ok); } .lcamchk i.wait { color: var(--warn); }
+  .learn-cams button { font-size: 11px; padding: 2px 7px; }
+  #learn-view { font-size: 12px; padding: 2px 4px; margin-left: 4px; }
+  #learn-camf { font-size: 12px; padding: 3px 4px; }
+  .lthumb .lcam { position: absolute; left: 3px; top: 3px; font-style: normal; font-size: 10px; padding: 0 4px; border-radius: 3px; background: rgba(0,0,0,.7); color: var(--text); }
+  .learn-cap { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px 0; }
+  .learn-cap input { width: 56px; }
+  .learn-pad { margin: 6px 10px; }
+  #learn-ds { flex: 1 1 auto; min-width: 0; }
+  .learn-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .learn-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  .learn-form label:nth-child(2), .learn-form label:nth-child(3) { grid-column: 1 / -1; }
+  .learn-form input, .learn-form select { width: 100%; box-sizing: border-box; }
+  #learn-train.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  #learn-train-warn:empty { display: none; }
+  .lbar { height: 8px; border-radius: 4px; background: var(--ctl); overflow: hidden; }
+  .lbar i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+  .lbar i.busy { background: repeating-linear-gradient(45deg, var(--accent) 0 10px, #2a5fb0 10px 20px); }
+  .llog { margin: 6px 0 0; font: 11px/1.35 ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all; max-height: 70px; overflow: hidden; }
+  .learn-chart { width: 100%; height: 130px; display: block; }
+  .learn-chart[hidden], #learn-job[hidden] { display: none; }
+  .learn-side .cam-head { flex-wrap: wrap; }
+  .learn-side .cam-head .seg { flex-wrap: nowrap; }
+  .learn-conf { display: grid; grid-template-columns: auto minmax(0, 1fr) 40px; gap: 8px; align-items: center; }
+  .learn-objs { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+  .learn-objs .chip { display: inline-flex; align-items: center; gap: 4px; }
+  .lrun { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .lrun.active { border-color: var(--ok); }
+  .lrun-h { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .lrun-m { display: flex; gap: 12px; font-size: 12px; flex-wrap: wrap; }
+  .lrun .row button { font-size: 12px; padding: 4px 9px; }
+  .chip.ok { color: var(--ok); border-color: var(--ok); }
+  .learn-objs .bad { color: var(--bad); }
+  .learn-toast { position: fixed; left: 50%; bottom: calc(24px + var(--dock-h, 0px)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+                 background: var(--ctl); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; z-index: 50; transition: opacity .2s, transform .2s; max-width: 90vw; }
+  .learn-toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .learn-toast.bad { border-color: var(--bad); }
+  body.desk main > section > .learnx { flex: 1 1 0; min-height: 0; margin: 0; display: flex; gap: 0; align-items: stretch; }
+  body.desk .learnx > :is(.learn-main, .learn-side) { gap: 0; overflow: hidden; min-height: 0; }
+  body.desk .learn-main > :is(.learn-lab, .learn-gal) { min-height: 120px; }
+  body.desk #learn-canvas { flex: 1 1 auto; aspect-ratio: auto; min-height: 80px; height: 0; }
+  body.desk .learn-gal { display: flex; flex-direction: column; }
+  body.desk .learn-gallery { flex: 1 1 auto; min-height: 0; max-height: none; align-content: start; }
+  body.desk .learn-side > .learn-cam { min-height: 120px; }
+  body.desk .learn-side > .learn-cam > .view.learn-live { flex: 1 1 auto; aspect-ratio: auto; min-height: 60px; }
+  body.desk .learn-side > .learn-panels { overflow-y: auto; padding-right: 2px; min-height: 80px; }
+  body.desk #sec-learn { display: none; }
+
+  /* Virtual model of the car and its cameras, under the bird's-eye view */
+  .vmodel { position: relative; height: 220px; flex: 0 0 auto; border-top: 1px solid var(--line); background: var(--deep); }
+  .vmodel canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  .vmodel canvas:active { cursor: grabbing; }
+  .vmodel-help { position: absolute; left: 8px; right: 8px; bottom: 6px; font-size: 11px; color: var(--muted);
+                 pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vmodel-sel { position: absolute; left: 8px; top: 8px; font-size: 12px; line-height: 1.5; padding: 4px 8px; border-radius: 6px;
+                background: rgba(15,18,22,.85); border: 1px solid var(--line); pointer-events: none; font-variant-numeric: tabular-nums; }
+  body.desk section .cam.has-split > .view.sa, body.desk section .cam.has-split > .vmodel.sb { height: auto; min-height: 100px; }
+  body.desk section .cam.has-split > .view.sa { flex: var(--fa, .5) 1 0px; }
+  body.desk section .cam.has-split > .vmodel.sb { flex: var(--fb, .5) 1 0px; }
+  /* Calibrating on a tablet/computer: the panel moves into the control panel, under E-STOP. */
+  aside > details.calib { margin-bottom: 0; border-color: var(--accent); }
+  aside > details.calib .sliders { grid-template-columns: 62px minmax(0, 1fr) 64px; gap: 6px 8px; }
+  aside > details.calib .hint { font-size: 11.5px; }
+
+  /* Driving dashboard around the camera beside the bird's-eye view.
+     Sizes in em: the bars get a bigger font (scale) when there is room around the picture. */
+  #surround-box > .cam { position: relative; }
+  .dash { display: flex; align-items: center; justify-content: space-between; gap: .4em 1em; flex-wrap: wrap;
+          padding: .45em .85em; background: #11161c; flex: 0 0 auto; font-size: 14px; font-variant-numeric: tabular-nums;
+          align-content: center; overflow: hidden; }
+  .dash-top { border-bottom: 1px solid var(--line); }
+  .dash-bot { border-top: 1px solid var(--line); justify-content: center; }
+  .dash small { display: block; color: var(--muted); font-size: .8em; }
+  .d-speed { display: flex; align-items: baseline; gap: .45em; }
+  .d-speed b { font-size: 2em; line-height: 1; }
+  .d-speed span { color: var(--muted); font-size: .86em; }
+  .d-gear { font-style: normal; font-weight: 700; font-size: 1.07em; padding: .07em .55em; border-radius: .4em;
+            border: 1px solid var(--line); color: var(--muted); align-self: center; }
+  .d-gear.D { color: #fff; background: var(--ok); border-color: var(--ok); }
+  .d-gear.R { color: #fff; background: var(--warn); border-color: var(--warn); }
+  .d-steer { display: flex; align-items: center; gap: .45em; }
+  .d-steer svg { width: 4em; height: 2.3em; }
+  .d-steer svg circle { fill: var(--text); }
+  .d-arc { fill: none; stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+  .d-needle { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; transform-origin: 32px 32px; }
+  .d-info b, .d-batt b { font-size: 1em; }
+  .d-info b.bad { color: var(--bad); } .d-info b.ok { color: var(--ok); } .d-info b.warn { color: var(--warn); }
+  .d-batt { text-align: right; }
+  .d-prox { width: 6em; height: 4.6em; flex: 0 0 auto; }
+  .d-prox rect { fill: #2a313a; }
+  .d-prox rect.d-car { fill: #46515d; stroke: #8b95a3; }
+  .d-prox rect.near { fill: var(--bad); } .d-prox rect.mid { fill: var(--warn); } .d-prox rect.far { fill: var(--ok); }
+  .d-prox-list { display: grid; grid-template-columns: repeat(4, auto); gap: .15em 1.15em; align-items: baseline; font-size: .93em; color: var(--muted); }
+  .d-prox-list b { color: var(--text); font-size: 1.15em; }
+  .d-prox-list b.near { color: var(--bad); } .d-prox-list b.mid { color: var(--warn); } .d-prox-list b.far { color: var(--ok); }
+  .d-prox-list small { grid-column: 1 / -1; }
+  .d-prox-list span, .d-speed, .d-steer, .d-info b, .d-batt b { white-space: nowrap; }
+  .guide { position: absolute; pointer-events: none; z-index: 2; }
+  /* Bars + picture: the picture keeps its own aspect ratio, the bars take the rest of the window. */
+  .side-stack { display: flex; align-items: center; justify-content: center; background: #000; min-width: 0; }
+  .side-inner { position: relative; display: flex; flex-direction: column; max-width: 100%; }
+  .side-inner > .view { flex: none; aspect-ratio: auto; max-height: none; min-height: 0; }
+  body.desk .side-stack, .win-max .side-stack { flex: 1 1 0; min-height: 0; overflow: hidden; }
+  @media (max-width: 700px) { .d-prox-list { grid-template-columns: repeat(2, auto); } .dash { font-size: 13px; } }
+  .win-max > .cloud-wrap { flex: 1 1 auto !important; aspect-ratio: auto !important;
+                           max-height: none !important; min-height: 0 !important; }

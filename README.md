@@ -9,11 +9,26 @@ For the Isaac Sim (Jazzy) side see [quanser_issac_ros2](https://github.com/ENTEC
 src/
 ├── qcar2/      QCar2: qcar2_web (web UI + systemd services), qcar2_nodes,
 │               qcar2_autonomy, qcar2_odom, qcar2_interfaces
-└── common/     shared packages (when needed)
+└── common/     shared packages, checked out with every robot
+    └── robot_web_ui   the robots' web UI: theme, layout, camera streams, template page
 scripts/clone_robot.sh
 ```
 
 Each robot lives in `src/<robot>/`. To add one, create `src/<robot>/`.
+`clone_robot.sh` always checks out `src/common` as well.
+
+### Web UI for another robot
+
+Every robot's web page uses the same look and layout from `src/common/robot_web_ui`
+(see its [README](src/common/robot_web_ui/README.md)). To start a new robot's page, run the
+example node, then copy its node and template page into `src/<robot>/<robot>_web`:
+
+```bash
+colcon build --packages-select robot_web_ui && source install/setup.bash
+ros2 run robot_web_ui example_server --ros-args -p cameras:="['front=/camera/image_raw']"
+```
+
+Changing `robot_web_ui` changes every robot's page: check `qcar2_web` after such a change.
 
 ---
 
@@ -53,7 +68,7 @@ bash clone_robot.sh qcar2 -d ~/ros2
 git clone --filter=blob:none --no-checkout https://github.com/ENTECH-Industrial-Solution/quanser_ros2.git ~/ros2
 cd ~/ros2
 git sparse-checkout init --cone
-git sparse-checkout set src/qcar2 scripts
+git sparse-checkout set src/qcar2 src/common scripts
 git checkout
 ```
 
@@ -96,9 +111,14 @@ Do not start the ROS hardware nodes while a QUARC (MATLAB/Simulink) model is run
 
 ```bash
 cd ~/ros2 && git pull
+git sparse-checkout list 2>/dev/null | grep -qx src/common || \
+  { git config core.sparseCheckout | grep -q true && git sparse-checkout add src/common; }   # once: qcar2_web needs src/common
 source /opt/ros/humble/setup.bash && colcon build
 sudo src/qcar2/qcar2_web/system/install.sh      # only if files in system/ changed
 ```
+
+Cars cloned before `src/common/robot_web_ui` existed with a sparse checkout (way A or B) do not
+get `src/common` from `git pull`; the second line adds it (it does nothing on a full clone).
 
 ## Adding another robot later
 
